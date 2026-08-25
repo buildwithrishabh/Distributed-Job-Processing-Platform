@@ -5,6 +5,7 @@ const morgan = require("morgan");
 const helmet = require("helmet");
 const authRoutes = require("./routes/authRoutes");
 const jobRoutes = require("./routes/jobRoutes");
+const dlqRoutes = require("./routes/dlqRoutes");
 const errorHandler = require("./middleware/errorHandler");
 
 const app = express();
@@ -24,6 +25,7 @@ app.use(cookieParser());
 // API Routes
 app.use("/api/auth", authRoutes);
 app.use("/api", jobRoutes);
+app.use("/api", dlqRoutes);
 
 // Health check endpoint
 app.get("/health", (req, res) => {
