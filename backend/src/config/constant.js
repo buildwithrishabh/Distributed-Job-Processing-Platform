@@ -12,8 +12,6 @@ const JOB_STATUS = {
 
 const JOB_TYPES = {
   EMAIL: "email",
-  REPORT: "report",
-  IMAGE: "image",
 };
 
 module.exports = {

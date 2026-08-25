@@ -39,6 +39,12 @@ const envSchema = z.object({
   RATE_LIMIT_MAX_REQUESTS: z.coerce.number().positive().default(10),
 
   RATE_LIMIT_WINDOW_SECONDS: z.coerce.number().positive().default(60),
+
+  BREVO_API_KEY: z.string().optional().default(""),
+
+  BREVO_SENDER_EMAIL: z.string().optional().default("noreply@example.com"),
+
+  BREVO_SENDER_NAME: z.string().optional().default("Distributed Job Platform"),
 });
 
 const env = envSchema.parse(process.env);

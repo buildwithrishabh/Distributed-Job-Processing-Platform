@@ -3,6 +3,7 @@ const redisClient = require("../config/redis");
 const { QUEUE_NAME } = require("../queues/job.queue");
 const Job = require("../models/job");
 const { JOB_STATUS } = require("../config/constant");
+const { processJobDispatch } = require("../processors");
 
 const createJobWorker = (workerId = "worker_1", concurrency = 5) => {
   const worker = new Worker(
@@ -13,7 +14,7 @@ const createJobWorker = (workerId = "worker_1", concurrency = 5) => {
         `[${workerId}] Starting processing for job: ${jobId} (Type: ${type})`,
       );
 
-      //    Mark as PROCESSING in MongoDB & increment attempt counter
+      // Mark as PROCESSING in MongoDB & increment attempt counter
       await Job.findOneAndUpdate(
         {
           jobId,
@@ -30,8 +31,8 @@ const createJobWorker = (workerId = "worker_1", concurrency = 5) => {
         payload,
       );
 
-
-    //   yaha pe processor lagega abhi 
+      // Execute dispatch to matched job processor strategy
+      const result = await processJobDispatch(type, payload, job);
 
       await Job.findOneAndUpdate(
         {
@@ -44,7 +45,7 @@ const createJobWorker = (workerId = "worker_1", concurrency = 5) => {
       );
 
       console.log(`[${workerId}] Completed job: ${jobId}`);
-      return { success: true, jobId };
+      return { success: true, jobId, result };
     },
     {
       connection: redisClient,
