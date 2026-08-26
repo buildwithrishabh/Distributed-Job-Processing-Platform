@@ -18,11 +18,15 @@ const retryDeadJobService = async(JobId) => {
     const job = await Job.findOne({ jobId: JobId });
 
     if(!job){
-        throw new Error("Job not found")
+        const error = new Error("Job not found");
+        error.statusCode = 404;
+        throw error;
     }
 
     if (job.status !== JOB_STATUS.DEAD && job.status !== JOB_STATUS.FAILED) {
-        throw new Error(`Job is not in dead or failed state, current state: ${job.status}`)
+        const error =  new Error(`Job is not in dead or failed state, current state: ${job.status}`)
+        error.statusCode = 400;
+        throw error;
     }
 
     job.status = JOB_STATUS.PENDING;

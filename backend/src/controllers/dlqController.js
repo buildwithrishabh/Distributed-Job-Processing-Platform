@@ -19,7 +19,7 @@ const retryDeadJob = async (req , res , next) => {
             job: retriedJob,
         });
     } catch (error) {
-        return res.status(400).json({ error: error.message})
+        next(error)
     }
 }
 
