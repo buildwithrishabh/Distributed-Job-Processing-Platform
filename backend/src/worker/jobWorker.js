@@ -1,9 +1,12 @@
 const { Worker } = require("bullmq");
-const redisClient = require("../config/redis");
+const bullMQConnection = require("../config/queueConnection");
 const { QUEUE_NAME } = require("../queues/job.queue");
 const Job = require("../models/job");
 const { JOB_STATUS } = require("../config/constant");
 const { processJobDispatch } = require("../processors");
+const { withTimeout } = require("../utils/timeout");
+
+const JOB_TIMEOUT_MS = 15000; // 15 Seconds Max Execution Time
 
 const createJobWorker = (workerId = "worker_1", concurrency = 5) => {
   const worker = new Worker(
@@ -31,8 +34,11 @@ const createJobWorker = (workerId = "worker_1", concurrency = 5) => {
         payload,
       );
 
-      // Execute dispatch to matched job processor strategy
-      const result = await processJobDispatch(type, payload, job);
+      // Execute dispatch to matched job processor strategy with timeout wrapper
+      const result = await withTimeout(
+        processJobDispatch(type, payload, job),
+        JOB_TIMEOUT_MS,
+      );
 
       await Job.findOneAndUpdate(
         {
@@ -48,7 +54,7 @@ const createJobWorker = (workerId = "worker_1", concurrency = 5) => {
       return { success: true, jobId, result };
     },
     {
-      connection: redisClient,
+      connection: bullMQConnection,
       concurrency,
     },
   );
@@ -60,7 +66,7 @@ const createJobWorker = (workerId = "worker_1", concurrency = 5) => {
     const maxAttempts = job.opts.attempts || 3;
 
     const isDead = attemptsMade >= maxAttempts;
-    const newStatus = isDead ? JOB_STATUS.DEAD : JOB_STATUS.FAILED;
+    const newStatus = isDead ? JOB_STATUS.DEAD : JOB_STATUS.RETRYING;
 
     console.error(
       `[${workerId}] Job ${jobId} failed (Attempt ${attemptsMade}/${maxAttempts}). Status: ${newStatus}`,

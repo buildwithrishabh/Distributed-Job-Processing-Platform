@@ -4,10 +4,11 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "start": "node src/server.js",
-    "dev": "node --watch src/server.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
+  "start": "node src/server.js",
+  "dev": "node --watch src/server.js",
+  "worker": "node src/worker.js",
+  "worker:dev": "node --watch src/worker.js"
+},
   "keywords": [],
   "author": "",
   "license": "ISC",

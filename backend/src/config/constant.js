@@ -8,6 +8,7 @@ const JOB_STATUS = {
   FAILED: "FAILED",
   CANCELLED: "CANCELLED",
   DEAD: "DEAD",
+  RETRYING: "RETRYING",
 };
 
 const JOB_TYPES = {

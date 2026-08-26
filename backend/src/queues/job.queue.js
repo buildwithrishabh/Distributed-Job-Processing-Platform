@@ -1,12 +1,12 @@
 const { Queue } = require("bullmq");
 const env = require("../config/env");
-const redisClient = require("../config/redis");
+const bullMQConnection = require("../config/queueConnection");
 
 const QUEUE_NAME = "job-queue";
 
 // Instantiate the BullMQ Queue
 const jobQueue = new Queue(QUEUE_NAME, {
-  connection: redisClient,
+  connection: bullMQConnection,
   defaultJobOptions: {
     attempts: 3,
     backoff: {

@@ -1,6 +1,7 @@
 const Job = require("../models/job");
 const { addJobToQueue } = require("../queues/job.queue");
 const { JOB_STATUS } = require("../config/constant");
+const {saveIdempotencyKey } = require("../middleware/idempotency");
 
 const createJobService = async ({
   type,
@@ -8,6 +9,7 @@ const createJobService = async ({
   priority = 0,
   maxAttempts = 3,
   idempotencyKey = null,
+  idempotencyRedisKey = null,
   userId = null,
 }) => {
   const jobId = `job_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
@@ -19,9 +21,13 @@ const createJobService = async ({
     status: JOB_STATUS.PENDING,
     priority,
     maxAttempts,
-    idempotencyKey,
+    idempotencyKey,    // comes from header sent by client (we are saving it)
     userId,
   });
+
+  if (idempotencyRedisKey) {
+    await saveIdempotencyKey(idempotencyRedisKey , jobId)
+  }
 
   await addJobToQueue(DbJob);
 

@@ -11,6 +11,8 @@ const createJob = async (req, res, next) => {
       priority,
       maxAttempts,
       userId,
+      idempotencyKey: req.idempotencyKey,
+      idempotencyRedisKey: req.idempotencyRedisKey,
     });
 
     return res.status(202).json({
