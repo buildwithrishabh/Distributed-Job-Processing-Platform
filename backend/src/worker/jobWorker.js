@@ -65,11 +65,12 @@ const createJobWorker = (workerId = "worker_1", concurrency = 5) => {
     const attemptsMade = job.attemptsMade;
     const maxAttempts = job.opts.attempts || 3;
 
-    const isDead = attemptsMade >= maxAttempts;
+    const isUnrecoverable = err.name === "UnrecoverableError" || Boolean(err.unrecoverable);
+    const isDead = attemptsMade >= maxAttempts || isUnrecoverable;
     const newStatus = isDead ? JOB_STATUS.DEAD : JOB_STATUS.RETRYING;
 
     console.error(
-      `[${workerId}] Job ${jobId} failed (Attempt ${attemptsMade}/${maxAttempts}). Status: ${newStatus}`,
+      `[${workerId}] Job ${jobId} failed (Attempt ${attemptsMade}/${maxAttempts}, Unrecoverable: ${isUnrecoverable}). Status: ${newStatus}`,
     );
 
     await Job.findOneAndUpdate(
