@@ -1,6 +1,7 @@
 const connectDB = require("./config/db");
 const { createJobWorker } = require("./worker/jobWorker");
 const env = require("./config/env");
+const { startWorkerHeartBeat } = require("./utils/heartBeat");
 
 const startWorkerProcess = async () => {
   try {
@@ -8,6 +9,9 @@ const startWorkerProcess = async () => {
 
     const workerId = process.env.WORKER_ID || `worker_${process.pid}`;
     const concurrency = Number(process.env.WORKER_CONCURRENCY) || 5;
+
+    
+    const stopHeartBeat = startWorkerHeartBeat(workerId);
 
     const worker = createJobWorker(workerId, concurrency);
     console.log(
@@ -18,6 +22,8 @@ const startWorkerProcess = async () => {
       console.log(
         `[Worker Process] ${signal} received. Closing worker gracefully...`,
       );
+
+      await stopHeartBeat();
       await worker.close();
       process.exit(0);
     };

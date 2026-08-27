@@ -6,6 +6,7 @@ const helmet = require("helmet");
 const authRoutes = require("./routes/authRoutes");
 const jobRoutes = require("./routes/jobRoutes");
 const dlqRoutes = require("./routes/dlqRoutes");
+const workerRoutes = require("./routes/workerRoutes");
 const errorHandler = require("./middleware/errorHandler");
 
 const app = express();
@@ -26,6 +27,7 @@ app.use(cookieParser());
 app.use("/api/auth", authRoutes);
 app.use("/api", dlqRoutes);
 app.use("/api", jobRoutes);
+app.use("/api", workerRoutes);
 
 // Health check endpoint
 app.get("/health", (req, res) => {
