@@ -4,11 +4,13 @@ const jobController = require("../controllers/jobController");
 const { authenticate } = require("../middleware/auth");
 const { validateCreateJob } = require("../middleware/validateRequest");
 const { idempotencyMiddleware } = require("../middleware/idempotency");
+const backpressureGuard = require("../middleware/backpressure");
 
 // Protect job endpoints with authentication middleware
 router.post(
   "/jobs",
   authenticate,
+  backpressureGuard,
   idempotencyMiddleware,
   validateCreateJob,
   jobController.createJob,
