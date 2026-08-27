@@ -3,7 +3,7 @@ const env = require("../config/env");
 
 const backpressureGuard = async (req, res, next) => {
   try {
-    const maxCapacity = env.MAX_QUEUE_CAPACITY || 50000;
+    const maxCapacity = env.MAX_QUEUE_CAPACITY;
 
     // Fetch total waiting and delayed jobs count in Redis
     const waitingCount = await jobQueue.getWaitingCount();
