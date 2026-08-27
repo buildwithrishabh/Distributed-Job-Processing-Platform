@@ -11,7 +11,7 @@ const envSchema = z.object({
   MONGO_URI: z
     .string()
     .min(1)
-    .default("mongodb://localhost:27017/job_platform"),
+    .default(process.env.MONGODB_URI || "mongodb://localhost:27017/job_platform"),
 
   REDIS_HOST: z.string().default("localhost"),
 
@@ -20,6 +20,10 @@ const envSchema = z.object({
   REDIS_PASSWORD: z.string().optional().default(""),
 
   CLIENT_URL: z.string().optional().default("http://localhost:5173"),
+
+  WORKER_ID: z.string().optional().default("worker_1"),
+
+  WORKER_CONCURRENCY: z.coerce.number().positive().default(5),
 
   JWT_SECRET: z
     .string()
