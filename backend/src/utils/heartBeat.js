@@ -1,4 +1,4 @@
-const { redisClient } = require("../config/redis");
+const redisClient = require("../config/redis");
 
 const HEARTBEAT_PREFIX = "worker:heartbeat:";
 const INTERVAL_MS = 10000; // Send heartbeat every 10 seconds
@@ -52,7 +52,7 @@ const getActiveWorker = async () => {
     const keys = await redisClient.keys(`${HEARTBEAT_PREFIX}*`);
     if (!keys.length) return [];
 
-    const rawData = await redisClient.mget(keys);;
+    const rawData = await redisClient.mget(keys);
     const now = Date.now();
 
     return rawData.filter(Boolean).map(((item) => {

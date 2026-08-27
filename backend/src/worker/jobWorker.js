@@ -5,6 +5,7 @@ const Job = require("../models/job");
 const { JOB_STATUS } = require("../config/constant");
 const { processJobDispatch } = require("../processors");
 const { withTimeout } = require("../utils/timeout");
+const { acquireLock, releaseLock } = require("../utils/lock");
 
 const JOB_TIMEOUT_MS = 15000; // 15 Seconds Max Execution Time
 
@@ -17,66 +18,86 @@ const createJobWorker = (workerId = "worker_1", concurrency = 5) => {
         `[${workerId}] Starting processing for job: ${jobId} (Type: ${type})`,
       );
 
-      // Check MongoDb for existing Job state
-      const dbJob = await Job.findOne({ jobId });
-
-      // If Job i cancelled or deleted, skip execution immediately
-      if (!dbJob) {
-        console.log(`[${workerId}] Job ${jobId} not found in DB. Skipping.`);
-        return { skipped: true, reason: "Job not found in database" };
-      }
-
-      if (dbJob.status === JOB_STATUS.CANCELLED) {
+      const lockToken = await acquireLock(`worker:job:${jobId}`, 20);
+      if (!lockToken) {
         console.log(
-          `[${workerId}] Job ${jobId} was CANCELLED by user. Skipping execution.`,
+          `[${workerId}] Job ${jobId} is already being processed by another worker. Skipping.`,
         );
-        return { skipped: true, reason: "Job was cancelled by user" };
+        return {
+          skipped: true,
+          reason: "Job is already being processed by another worker",
+        };
       }
 
-      // Atomic update to PROCESSING (only if status is NOT CANCELLED)
-      const processingDb = await Job.findOneAndUpdate(
-        {
-          jobId,
-          status: { $ne: JOB_STATUS.CANCELLED },
-        },
-        {
-          status: JOB_STATUS.PROCESSING,
-          startedAt: new Date(),
-          $inc: { attempts: 1 },
-        },
-        { new: true },
-      );
+      try {
+        // Check MongoDb for existing Job state
+        const dbJob = await Job.findOne({ jobId });
 
-      if (!processingDb) {
+        // If Job i cancelled or deleted, skip execution immediately
+        if (!dbJob) {
+          console.log(`[${workerId}] Job ${jobId} not found in DB. Skipping.`);
+          return { skipped: true, reason: "Job not found in database" };
+        }
+
+        if (dbJob.status === JOB_STATUS.CANCELLED) {
+          console.log(
+            `[${workerId}] Job ${jobId} was CANCELLED by user. Skipping execution.`,
+          );
+          return { skipped: true, reason: "Job was cancelled by user" };
+        }
+
+        // Atomic update to PROCESSING (only if status is NOT CANCELLED)
+        const processingDb = await Job.findOneAndUpdate(
+          {
+            jobId,
+            status: { $ne: JOB_STATUS.CANCELLED },
+          },
+          {
+            status: JOB_STATUS.PROCESSING,
+            startedAt: new Date(),
+            $inc: { attempts: 1 },
+          },
+          { new: true },
+        );
+
+        if (!processingDb) {
+          console.log(
+            `[${workerId}] Job ${jobId} status changed during lock. Skipping.`,
+          );
+          return {
+            skipped: true,
+            reason: "Job status changed before execution",
+          };
+        }
+
         console.log(
-          `[${workerId}] Job ${jobId} status changed during lock. Skipping.`,
+          `[${workerId}] Processing job ${jobId} with payload:`,
+          payload,
         );
-        return { skipped: true, reason: "Job status changed before execution" };
+
+        // Execute dispatch to matched job processor strategy with timeout wrapper
+        const result = await withTimeout(
+          processJobDispatch(type, payload, job),
+          JOB_TIMEOUT_MS,
+        );
+
+        await Job.findOneAndUpdate(
+          {
+            jobId,
+            status: JOB_STATUS.PROCESSING
+          },
+          {
+            status: JOB_STATUS.COMPLETED,
+            completedAt: new Date(),
+          },
+        );
+
+        console.log(`[${workerId}] Completed job: ${jobId}`);
+        return { success: true, jobId, result };
+      } finally {
+        // Release the lock
+        await releaseLock(`worker:job:${jobId}`, lockToken);
       }
-
-      console.log(
-        `[${workerId}] Processing job ${jobId} with payload:`,
-        payload,
-      );
-
-      // Execute dispatch to matched job processor strategy with timeout wrapper
-      const result = await withTimeout(
-        processJobDispatch(type, payload, job),
-        JOB_TIMEOUT_MS,
-      );
-
-      await Job.findOneAndUpdate(
-        {
-          jobId,
-        },
-        {
-          status: JOB_STATUS.COMPLETED,
-          completedAt: new Date(),
-        },
-      );
-
-      console.log(`[${workerId}] Completed job: ${jobId}`);
-      return { success: true, jobId, result };
     },
     {
       connection: bullMQConnection,
