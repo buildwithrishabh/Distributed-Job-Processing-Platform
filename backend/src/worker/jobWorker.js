@@ -17,17 +17,42 @@ const createJobWorker = (workerId = "worker_1", concurrency = 5) => {
         `[${workerId}] Starting processing for job: ${jobId} (Type: ${type})`,
       );
 
-      // Mark as PROCESSING in MongoDB & increment attempt counter
-      await Job.findOneAndUpdate(
+      // Check MongoDb for existing Job state
+      const dbJob = await Job.findOne({ jobId });
+
+      // If Job i cancelled or deleted, skip execution immediately
+      if (!dbJob) {
+        console.log(`[${workerId}] Job ${jobId} not found in DB. Skipping.`);
+        return { skipped: true, reason: "Job not found in database" };
+      }
+
+      if (dbJob.status === JOB_STATUS.CANCELLED) {
+        console.log(
+          `[${workerId}] Job ${jobId} was CANCELLED by user. Skipping execution.`,
+        );
+        return { skipped: true, reason: "Job was cancelled by user" };
+      }
+
+      // Atomic update to PROCESSING (only if status is NOT CANCELLED)
+      const processingDb = await Job.findOneAndUpdate(
         {
           jobId,
+          status: { $ne: JOB_STATUS.CANCELLED },
         },
         {
           status: JOB_STATUS.PROCESSING,
           startedAt: new Date(),
           $inc: { attempts: 1 },
         },
+        { new: true },
       );
+
+      if (!processingDb) {
+        console.log(
+          `[${workerId}] Job ${jobId} status changed during lock. Skipping.`,
+        );
+        return { skipped: true, reason: "Job status changed before execution" };
+      }
 
       console.log(
         `[${workerId}] Processing job ${jobId} with payload:`,
@@ -65,7 +90,8 @@ const createJobWorker = (workerId = "worker_1", concurrency = 5) => {
     const attemptsMade = job.attemptsMade;
     const maxAttempts = job.opts.attempts || 3;
 
-    const isUnrecoverable = err.name === "UnrecoverableError" || Boolean(err.unrecoverable);
+    const isUnrecoverable =
+      err.name === "UnrecoverableError" || Boolean(err.unrecoverable);
     const isDead = attemptsMade >= maxAttempts || isUnrecoverable;
     const newStatus = isDead ? JOB_STATUS.DEAD : JOB_STATUS.RETRYING;
 

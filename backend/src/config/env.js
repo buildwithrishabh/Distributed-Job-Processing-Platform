@@ -17,6 +17,10 @@ const envSchema = z.object({
 
   REDIS_PORT: z.coerce.number().default(6379),
 
+  REDIS_PASSWORD: z.string().optional().default(""),
+
+  CLIENT_URL: z.string().optional().default("http://localhost:5173"),
+
   JWT_SECRET: z
     .string()
     .min(10, "JWT_SECRET must be at least 10 characters")

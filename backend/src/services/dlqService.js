@@ -1,5 +1,5 @@
 const Job = require("../models/job");
-const { addJobToQueue } = require("../queues/job.queue");
+const { addJobToQueue , jobQueue} = require("../queues/job.queue");
 const { JOB_STATUS } = require("../config/constant");
 
 const getDeadJobService = async ( { page = 1 , limit = 10}) => {
@@ -38,14 +38,14 @@ const retryDeadJobService = async(JobId) => {
     await job.save();
 
 
+    // Removing existing failed job from BullMQ if present to allow re-enqueue.
+    const existingBullJob = await jobQueue.getJob(job.jobId);
+    if (existingBullJob) {
+        await existingBullJob.remove();
+    }
+
     // Re-Enqueue into BullMQ Queue
-    await addJobToQueue({
-        jobId: job.jobId,
-        type: job.type,
-        payload: job.payload,
-        priority: job.priority,
-        maxAttempts: job.maxAttempts,
-    });
+    await addJobToQueue(job);
 
     return job;
 }

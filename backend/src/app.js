@@ -24,8 +24,8 @@ app.use(cookieParser());
 
 // API Routes
 app.use("/api/auth", authRoutes);
-app.use("/api", jobRoutes);
 app.use("/api", dlqRoutes);
+app.use("/api", jobRoutes);
 
 // Health check endpoint
 app.get("/health", (req, res) => {
