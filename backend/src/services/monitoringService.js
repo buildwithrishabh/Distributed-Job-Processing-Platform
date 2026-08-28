@@ -1,5 +1,5 @@
 const Job = require("../models/job");
-const { jobQueue } = require("../queues/jobQueue");
+const { jobQueue } = require("../queues/job.queue");
 const { getActiveWorker } = require("../utils/heartBeat");
 
 // Queue metrics

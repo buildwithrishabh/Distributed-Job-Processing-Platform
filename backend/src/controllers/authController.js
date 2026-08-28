@@ -3,8 +3,23 @@ const jwt = require("jsonwebtoken");
 const User = require("../models/user");
 const env = require("../config/env");
 
-const { generateAccessToken, generateRefreshToken, hashToken } = require("../utils/jwt");
+const {
+  generateAccessToken,
+  generateRefreshToken,
+  hashToken,
+} = require("../utils/jwt");
 
+// ================= GET ME =================
+exports.getMe = async (req, res, next) => {
+  try {
+    return res.status(200).json({
+      success: true,
+      user: req.user,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
 
 // ================= REGISTER =================
 exports.register = async (req, res, next) => {
@@ -127,13 +142,19 @@ exports.refresh = async (req, res, next) => {
     }
 
     // Verify refresh token using env fallback
-    const refreshSecret = process.env.JWT_REFRESH_SECRET || env.REFRESH_TOKEN_SECRET || env.JWT_SECRET;
+    const refreshSecret =
+      process.env.JWT_REFRESH_SECRET ||
+      env.REFRESH_TOKEN_SECRET ||
+      env.JWT_SECRET;
     let decoded;
     try {
       decoded = jwt.verify(refreshToken, refreshSecret);
     } catch (jwtErr) {
       return res.status(401).json({
-        message: jwtErr.name === "TokenExpiredError" ? "Refresh token expired" : "Invalid refresh token",
+        message:
+          jwtErr.name === "TokenExpiredError"
+            ? "Refresh token expired"
+            : "Invalid refresh token",
       });
     }
 
@@ -236,5 +257,3 @@ exports.logout = async (req, res, next) => {
     next(error);
   }
 };
-
-

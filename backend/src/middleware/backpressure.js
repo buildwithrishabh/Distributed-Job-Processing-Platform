@@ -1,4 +1,4 @@
-const { jobQueue } = require("../queues/jobQueue");
+const { jobQueue } = require("../queues/job.queue");
 const env = require("../config/env");
 
 const backpressureGuard = async (req, res, next) => {

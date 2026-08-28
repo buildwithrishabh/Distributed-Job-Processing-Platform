@@ -54,7 +54,9 @@ const cancelJobService = async (jobId) => {
   const job = await Job.findOne({ jobId });
   if (!job) return null;
   if (job.status !== JOB_STATUS.PENDING) {
-    throw new Error(`Cannot cancel job in ${job.status} status`);
+    const error = new Error(`Cannot cancel job in ${job.status} status`);
+    error.statusCode = 400;
+    throw error;
   }
 
   job.status = JOB_STATUS.CANCELLED;
