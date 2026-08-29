@@ -25,7 +25,6 @@
 - [🔌 API Endpoints](#-api-endpoints)
 - [🖥️ Frontend Overview](#️-frontend-overview)
 - [🧠 Deep Dive & Architecture Doc](#-deep-dive--architecture-doc)
-- [🛣️ Roadmap](#️-roadmap)
 - [📄 License](#-license)
 
 ---
@@ -60,38 +59,7 @@ For a complete breakdown of the code structure and files, see [ARCHITECTURE.md](
 
 ## 🏗️ Architecture Overview
 
-```
-                        ┌──────────────────────────────────────────┐
-                        │             React Frontend              │
-                        │        (Dashboard / Monitoring)        │
-                        └─────────────────┬────────────────────────┘
-                                          │ REST (fetch/axios, httpOnly cookies)
-                                          ▼
-                        ┌──────────────────────────────────────────┐
-                        │          Express API  (Node.js)          │
-                        │  Auth · Validation · Idempotency ·       │
-                        │  Backpressure · Create/List/Cancel Jobs  │
-                        └───────┬───────────────┬──────────────────┘
-                                │               │
-                    Persist      │               │  Enqueue
-                    (MongoDB)    ▼               ▼
-                        ┌──────────────────────────────────────────┐
-                        │        MongoDB  (Job state store)        │
-                        └──────────────────────────────────────────┘
-                        ┌──────────────────────────────────────────┐
-                        │   Redis  ──  BullMQ "job-queue"          │
-                        │   · Queue · Lock store · Idempotency ·   │
-                        │   · Worker heartbeats                    │
-                        └───────┬───────────────┬──────────────────┘
-                                │  Consume      │  (shared)
-                                ▼               │
-        ┌───────────────────────────────────────────────┐
-        │          BullMQ Workers (scalable)            │
-        │   worker_1 ... worker_N  (N processes)        │
-        │   concurrency 5 each · distributed locking    │
-        │   → dispatch to registered job processors      │
-        └───────────────────────────────────────────────┘
-```
+`React Frontend (Dashboard)` ➔ `Express API (Auth, Idempotency, Backpressure)` ➔ `Redis (BullMQ Queue & Locks)` ➔ `Distributed Workers` ➔ `MongoDB (Job State Store)`
 
 A client submits a job via `POST /api/jobs`. The Express API processes it through a middleware pipeline (auth, backpressure, idempotency, validation), saves the state in MongoDB, and enqueues the task in Redis. Scalable BullMQ workers poll Redis, lock jobs to prevent concurrent execution, run the processor, and update the final status.
 
@@ -193,16 +161,6 @@ For in-depth explanations on the core engineering mechanisms, check out the dedi
 - ⚙️ **Idempotency, Backpressure & Worker Heartbeats**: Internal middleware logic and heartbeats.
 - 📜 **Full Environment Variable Reference**: Complete table of configurations.
 - 🧪 **Testing Scenarios**: Practical steps to simulate failures, retries, and locks.
-
----
-
-## 🛣️ Roadmap
-
-- [ ] Rate limiting middleware for endpoints.
-- [ ] Webhook trigger configurations on job state change.
-- [ ] Support additional job types (e.g. report generators, data synchronization).
-- [ ] Integrate WebSockets or Server-Sent Events (SSE) for real-time dashboard updates.
-- [ ] Automated integration test suite.
 
 ---
 
