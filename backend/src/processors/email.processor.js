@@ -68,9 +68,11 @@ async function emailProcessor(payload, bullJob) {
     });
 
     const responseData = await response.json().catch(() => ({}));
+    console.log(`[Email Processor] Brevo API Response Status: ${response.status}`, responseData);
 
     if (!response.ok) {
       const errorMsg = responseData.message || responseData.code || response.statusText;
+      console.error(`[Email Processor] Brevo Error (${response.status}):`, errorMsg);
 
       // 400 Bad Request from Brevo is a permanent error, no retry needed
       if (response.status === 400) {
