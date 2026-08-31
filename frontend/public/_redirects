@@ -1,0 +1,3 @@
+/api/*   https://distributed-job-processing-platform.onrender.com/api/:splat  200
+/health  https://distributed-job-processing-platform.onrender.com/health       200
+/*       /index.html                                                          200
