@@ -1,5 +1,6 @@
 const dns = require("dns");
 dns.setServers(["8.8.8.8" ,"1.1.1.1"]);
+const https = require("http");
 const connectDB = require("./config/db");
 const { createJobWorker } = require("./worker/jobWorker");
 const env = require("./config/env");
@@ -19,6 +20,23 @@ const startWorkerProcess = async () => {
     console.log(
       `[Worker Process] ${workerId} initialized with concurrency: ${concurrency}`,
     );
+
+
+    // Health server for render web service port detection 
+    const port = process.env.PORT || 10000;
+    const healthServer = https.createServer((req , res) => {
+      res.writeHead(200 , {"content-type" : "application/json"})
+      res.end(JSON.stringify({
+        status : "ok",
+        workerId,
+        concurrency,
+        uptime : process.uptime(),
+        pid : process.pid
+      }))
+    })
+    healthServer.listen(port , () => {
+      console.log(`[Health Server] Worker health check server started on port ${port}`) ; 
+    })
 
     const shutdown = async (signal) => {
       console.log(
