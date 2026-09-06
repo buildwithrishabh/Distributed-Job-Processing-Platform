@@ -11,7 +11,8 @@ const idempotencyMiddleware = async (req, res, next) => {
     return next();
   }
 
-  const redisKey = `${IDEMPOTENCY_PREFIX}${idempotencyKey}`;
+  const userPrefix = req.user ? `${req.user._id}:` : "";
+  const redisKey = `${IDEMPOTENCY_PREFIX}${userPrefix}${idempotencyKey}`;
 
   try {
     const cachedJobId = await redisClient.get(redisKey);
@@ -21,7 +22,7 @@ const idempotencyMiddleware = async (req, res, next) => {
         `[Idempotency] Duplicate request detected for key: ${idempotencyKey}. Cached JobId: ${cachedJobId}`,
       );
 
-      const existingJob = await Job.findOne({ jobId: cachedJobId });
+      const existingJob = await Job.findOne({ jobId: cachedJobId , userId: req.user?._id});
 
       if (existingJob) {
         return res.status(200).json({

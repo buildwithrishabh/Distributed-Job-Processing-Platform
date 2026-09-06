@@ -3,7 +3,7 @@ const dlqService = require("../services/dlqService");
 const getDeadJobs = async (req , res  , next) => {
     try {
         const { page , limit } = req.query;
-        const result = await dlqService.getDeadJobService({ page , limit});
+        const result = await dlqService.getDeadJobService({ page , limit , userId:  req.user._id});
         return res.status(200).json(result);
     } catch (error) {
         next(error);
@@ -13,7 +13,7 @@ const getDeadJobs = async (req , res  , next) => {
 const retryDeadJob = async (req , res , next) => {
     try {
         const { id } = req.params;
-        const retriedJob = await dlqService.retryDeadJobService(id);
+        const retriedJob = await dlqService.retryDeadJobService(id , req.user._id);
         return res.status(200).json({
             message: "Job successfully re-queued for processing",
             job: retriedJob,

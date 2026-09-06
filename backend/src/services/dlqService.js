@@ -3,21 +3,22 @@ const { addJobToQueue, jobQueue } = require("../queues/job.queue");
 const { JOB_STATUS } = require("../config/constant");
 const { acquireLock, releaseLock } = require("../utils/lock");
 
-const getDeadJobService = async ({ page = 1, limit = 10 }) => {
+const getDeadJobService = async ({ page = 1, limit = 10 , userId }) => {
+  const query = { status: JOB_STATUS.DEAD , userId};
   const skip = (page - 1) * limit;
 
   const [jobs, total] = await Promise.all([
-    Job.find({ status: JOB_STATUS.DEAD })
+    Job.find(query)
       .sort({ failedAt: -1 })
       .skip(skip)
       .limit(limit),
-    Job.countDocuments({ status: JOB_STATUS.DEAD }),
+    Job.countDocuments(query),
   ]);
 
   return { jobs, total, page: Number(page), limit: Number(limit) };
 };
 
-const retryDeadJobService = async (JobId) => {
+const retryDeadJobService = async (JobId , userId) => {
   // Acqiure Redis lock for 10 seconds to prevent concurrent retries for the same JobId.
 
   const lockToken = await acquireLock(`dlq:retry:${JobId}`, 10);
@@ -31,7 +32,7 @@ const retryDeadJobService = async (JobId) => {
   }
 
   try {
-    const job = await Job.findOne({ jobId: JobId });
+    const job = await Job.findOne({ jobId: JobId , userId});
 
     if (!job) {
       const error = new Error("Job not found");

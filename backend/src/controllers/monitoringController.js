@@ -11,7 +11,7 @@ const getQueueMetrics = async (req, res, next) => {
 
 const getJobStats = async (req, res, next) => {
   try {
-    const stats = await monitoringService.getJobStatsService();
+    const stats = await monitoringService.getJobStatsService(req.user._id);
     return res.status(200).json(stats);
   } catch (error) {
     next(error);
@@ -32,7 +32,7 @@ const getOverviewMetrics = async (req, res, next) => {
     try {
         const [queue , jobs , workers] = await Promise.all([
             monitoringService.getQueueMetricsService(),
-            monitoringService.getJobStatsService(),
+            monitoringService.getJobStatsService(req.user._id),
             monitoringService.getWorkerMetricsService(),
         ])
 

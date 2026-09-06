@@ -50,7 +50,6 @@ const jobSchema = new mongoose.Schema(
     },
     idempotencyKey: {
       type: String,
-      unique: true,
       sparse: true, // Allows multiple null/undefined values while ensuring non-null keys are unique
       index: true,
     },
@@ -65,6 +64,10 @@ const jobSchema = new mongoose.Schema(
 
 // Compound Index for monitoring queries
 jobSchema.index({ status: 1, createdAt: -1 });
+jobSchema.index({ userId: 1, createdAt: -1 });
+jobSchema.index({ userId: 1, status: 1, createdAt: -1 });
+jobSchema.index({ userId: 1, idempotencyKey: 1 }, { unique: true, sparse: true }); // ✅ Per user unique
+
 
 const Job = mongoose.model("Job", jobSchema);
 

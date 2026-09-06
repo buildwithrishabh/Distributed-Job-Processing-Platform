@@ -1,3 +1,4 @@
+const mongoose = require("mongoose");
 const Job = require("../models/job");
 const { jobQueue } = require("../queues/job.queue");
 const { getActiveWorker } = require("../utils/heartBeat");
@@ -24,8 +25,12 @@ const getQueueMetricsService = async () => {
 };
 
 // Get MongoDB Job statistics grouped by status
-const getJobStatsService = async () => {
+const getJobStatsService = async (userId) => {
+
+  const matchStage = userId ? {userId: new mongoose.Types.ObjectId(userId)} : {};
+
   const stats = await Job.aggregate([
+    { $match : matchStage},
     { $group: { _id: "$status", count: { $sum: 1 } } },
   ]);
 

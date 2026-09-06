@@ -12,6 +12,13 @@ const createJobService = async ({
   idempotencyRedisKey = null,
   userId = null,
 }) => {
+
+  if (!userId) {
+    const error = new Error("User ID is required to create a job");
+    error.statusCode = 401;
+    throw error;
+  }
+
   const jobId = `job_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
   const DbJob = await Job.create({
@@ -34,8 +41,10 @@ const createJobService = async ({
   return DbJob;
 };
 
-const getJobService = async ({ page = 1, limit = 10, status }) => {
-  const query = status ? { status } : {};
+const getJobService = async ({ page = 1, limit = 10, status , userId }) => {
+  const query  = {userId };
+  if (status) query.status = status;
+  
   const skip = (page - 1) * limit;
 
   const [jobs, total] = await Promise.all([
@@ -45,13 +54,13 @@ const getJobService = async ({ page = 1, limit = 10, status }) => {
   return { jobs, total, page: Number(page), limit: Number(limit) };
 };
 
-const getJobByIdService = async (jobId) => {
-  const job = await Job.findOne({ jobId });
+const getJobByIdService = async (jobId , userId) => {
+  const job = await Job.findOne({ jobId , userId });
   return job;
 };
 
-const cancelJobService = async (jobId) => {
-  const job = await Job.findOne({ jobId });
+const cancelJobService = async (jobId , userId) => {
+  const job = await Job.findOne({ jobId , userId });
   if (!job) return null;
   if (job.status !== JOB_STATUS.PENDING) {
     const error = new Error(`Cannot cancel job in ${job.status} status`);

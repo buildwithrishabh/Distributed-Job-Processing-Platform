@@ -32,7 +32,12 @@ const createJob = async (req, res, next) => {
 const getJobs = async (req, res, next) => {
   try {
     const { page, limit, status } = req.query;
-    const result = await jobService.getJobsService({ page, limit, status });
+    const result = await jobService.getJobsService({
+      page,
+      limit,
+      status,
+      userId: req.user._id,
+    });
     return res.status(200).json(result);
   } catch (error) {
     next(error);
@@ -41,7 +46,7 @@ const getJobs = async (req, res, next) => {
 
 const getJobById = async (req, res, next) => {
   try {
-    const job = await jobService.getJobByIdService(req.params.id);
+    const job = await jobService.getJobByIdService(req.params.id, req.user._id);
     if (!job) {
       return res.status(404).json({ error: "Job not found" });
     }
@@ -53,7 +58,7 @@ const getJobById = async (req, res, next) => {
 
 const deleteJob = async (req, res, next) => {
   try {
-    const job = await jobService.cancelJobService(req.params.id);
+    const job = await jobService.cancelJobService(req.params.id, req.user._id);
     if (!job) {
       return res.status(404).json({ error: "Job not found" });
     }
