@@ -9,7 +9,7 @@ const { acquireLock, releaseLock } = require("../utils/lock");
 
 const JOB_TIMEOUT_MS = 15000; // 15 Seconds Max Execution Time
 
-const createJobWorker = (workerId = "worker_1", concurrency = 5) => {
+const createJobWorker = (workerId, concurrency = 5) => {
   const worker = new Worker(
     QUEUE_NAME,
     async (job) => {

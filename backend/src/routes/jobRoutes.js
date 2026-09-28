@@ -5,11 +5,19 @@ const { authenticate } = require("../middleware/auth");
 const { validateCreateJob } = require("../middleware/validateRequest");
 const { idempotencyMiddleware } = require("../middleware/idempotency");
 const backpressureGuard = require("../middleware/backpressure");
+const slidingWindowRateLimiter = require("../middleware/rateLimiter");
+
+// Rate limiter for job creation to prevent queue flooding
+const jobRateLimiter = slidingWindowRateLimiter({
+  prefix: "rate-limit:jobs",
+  message: "Job creation limit reached. Please wait before submitting more jobs.",
+});
 
 // Protect job endpoints with authentication middleware
 router.post(
   "/jobs",
   authenticate,
+  jobRateLimiter,
   backpressureGuard,
   idempotencyMiddleware,
   validateCreateJob,

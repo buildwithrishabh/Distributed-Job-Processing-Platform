@@ -10,7 +10,9 @@ const startWorkerProcess = async () => {
   try {
     await connectDB();
 
-    const workerId = process.env.WORKER_ID || `worker_${process.pid}`;
+    const os = require("os");
+    const containerHost = os.hostname();
+    const workerId = process.env.WORKER_ID || `worker_${containerHost}_${process.pid}`;
     const concurrency = Number(process.env.WORKER_CONCURRENCY) || 5;
 
     
