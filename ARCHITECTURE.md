@@ -10,7 +10,7 @@ For the high-level summary and getting started instructions, refer to the main [
 
 ```
 Distributed Job Processing Platform/
-├── backend/                              # ← Backend (primary focus)
+├── backend/                              # ← Backend (API, Queues & Distributed Workers)
 │   ├── src/
 │   │   ├── config/                       # Configuration & connections
 │   │   │   ├── constant.js               # Global enums (job status / types)
@@ -19,22 +19,22 @@ Distributed Job Processing Platform/
 │   │   │   ├── queueConnection.js        # BullMQ Redis connection settings
 │   │   │   └── redis.js                  # Shared ioredis client
 │   │   ├── controllers/                  # HTTP request handlers
-│   │   │   ├── authController.js         # Register / login / refresh / logout
+│   │   │   ├── authController.js         # Register / login / refresh / logout / me
 │   │   │   ├── dlqController.js          # Dead-job listing & retry
 │   │   │   ├── jobController.js          # Create / list / get / cancel jobs
-│   │   │   └── monitoringController.js   # Queue & worker metrics
+│   │   │   └── monitoringController.js   # Overview, Queue, Job stats & Worker metrics
 │   │   ├── middleware/
-│   │   │   ├── auth.js                   # JWT authentication guard
-│   │   │   ├── backpressure.js           # Queue capacity guard (503)
+│   │   │   ├── auth.js                   # JWT authentication guard (cookie / header)
+│   │   │   ├── backpressure.js           # Queue capacity guard (503 Service Unavailable)
 │   │   │   ├── errorHandler.js           # Global error handler
-│   │   │   ├── idempotency.js            # Idempotency-Key middleware
+│   │   │   ├── idempotency.js            # Idempotency-Key middleware (user-scoped)
 │   │   │   └── validateRequest.js        # Zod schema validation
 │   │   ├── models/
-│   │   │   ├── job.js                    # Job document (lifecycle state)
+│   │   │   ├── job.js                    # Job document (lifecycle state, user-scoped)
 │   │   │   └── user.js                   # User document (bcrypt-hashed pwd)
 │   │   ├── processors/                   # Job-type execution strategies
 │   │   │   ├── index.js                  # Registry → processor dispatch
-│   │   │   └── email.processor.js        # Email job (Brevo / simulated)
+│   │   │   └── email.processor.js        # Email job (Brevo API / simulated fallback)
 │   │   ├── queues/
 │   │   │   └── job.queue.js              # BullMQ Queue + enqueue helper
 │   │   ├── routes/
@@ -43,32 +43,49 @@ Distributed Job Processing Platform/
 │   │   │   ├── jobRoutes.js              # /api/jobs
 │   │   │   └── monitoringRoutes.js       # /api/monitoring/*
 │   │   ├── services/                     # Business logic (separated from routes)
-│   │   │   ├── dlqService.js
-│   │   │   ├── jobService.js
-│   │   │   └── monitoringService.js
+│   │   │   ├── dlqService.js             # User-scoped DLQ retrieval & lock-guarded retry
+│   │   │   ├── jobService.js             # User-scoped CRUD & enqueue logic
+│   │   │   └── monitoringService.js      # Aggregated metrics for queues, jobs & workers
 │   │   ├── utils/
 │   │   │   ├── heartBeat.js              # Worker heartbeat + health evaluation
 │   │   │   ├── jwt.js                    # Token generation & hashing helpers
 │   │   │   ├── lock.js                   # Redis distributed lock (Lua release)
 │   │   │   └── timeout.js                # Promise.race execution timeout wrapper
 │   │   ├── worker/
-│   │   │   └── jobWorker.js              # BullMQ Worker → processing pipeline
-│   │   ├── app.js                        # Express app (middleware + routes)
+│   │   │   └── jobWorker.js              # BullMQ Worker → processing pipeline & DLQ transition
+│   │   ├── app.js                        # Express app (middleware + routes + /health)
 │   │   ├── server.js                     # HTTP server + graceful shutdown
-│   │   └── worker.js                     # Standalone worker process entrypoint
+│   │   └── worker.js                     # Standalone worker process + Render health server
 │   │
 │   ├── Dockerfile                        # Multi-stage-ish Node 20 production image
 │   ├── docker-compose.yml                # Mongo + Redis + API + Worker
 │   ├── .env.example                      # Environment template
 │   └── package.json
 │
-└── frontend/                             # React + Vite dashboard (monitoring UI)
+└── frontend/                             # React + Vite SPA (Management & Monitoring UI)
     └── src/
-        ├── api/client.js                 # Axios client + single-flight token refresh
-        ├── components/                   # Dashboard, JobTable, DLQManager, WorkerCluster...
-        ├── context/                      # Auth, Settings, UI contexts
-        ├── pages/LoginPage.jsx
-        └── App.jsx                       # Protected routes
+        ├── api/
+        │   └── client.js                 # Axios client + single-flight token refresh + error normalization
+        ├── components/                   # UI Modules
+        │   ├── AppLayout.jsx             # Shell layout with navigation & user profile
+        │   ├── CreateJobModal.jsx        # Job submission dialog (payload, priority, idempotency)
+        │   ├── Dashboard.jsx             # High-level metrics, throughput & status distribution
+        │   ├── DLQManager.jsx            # Dead-job viewer & 1-click recovery
+        │   ├── JobDetailDrawer.jsx       # Side-drawer inspector for job payloads & stack traces
+        │   ├── JobTable.jsx              # Paginated job management with status filters & search
+        │   ├── WorkerCluster.jsx         # Live worker heartbeat cluster monitoring
+        │   └── ui.jsx                    # Reusable design system primitives (Badge, StatCard, etc.)
+        ├── context/                      # State providers
+        │   ├── AuthContext.jsx           # User authentication state & token renewal
+        │   ├── SettingsContext.jsx       # Polling rate & user preferences
+        │   └── UIContext.jsx             # Modals, drawers, and theme controls
+        ├── hooks/
+        │   └── useQueries.js             # TanStack React Query hooks & mutations
+        ├── pages/
+        │   └── LoginPage.jsx             # Authentication screen (Login / Register)
+        ├── index.css                     # Layered Vanilla CSS Design System (light/dark)
+        ├── App.jsx                       # Protected client routing (/jobs, /dlq, /workers)
+        └── main.jsx                      # App bootstrapping
 ```
 
 ---
@@ -121,14 +138,15 @@ The system manages the state of each job explicitly. The status definitions (def
 ### Job Submission Flow
 
 1. `POST /api/jobs` hits the job route ([jobRoutes.js](file:///d:/Backend/Backend%20Projects/Distributed%20Job%20Processing%20Platform/backend/src/routes/jobRoutes.js)) wrapped in a middleware chain:
-   - `authenticate` → verify JWT.
-   - `backpressureGuard` → reject with `503` if the queue is over capacity.
-   - `idempotencyMiddleware` → look up the `Idempotency-Key` in Redis.
-   - `validateCreateJob` → Zod schema validation & sanitization.
+   - `authenticate` → verify JWT and attach authenticated `req.user`.
+   - `backpressureGuard` → reject with `503` if the queue waiting count exceeds `MAX_QUEUE_CAPACITY`.
+   - `idempotencyMiddleware` → look up `idempotency:<userId>:<key>` in Redis; return existing job if already submitted.
+   - `validateCreateJob` → Zod schema validation & payload sanitization.
 2. `jobController.createJob` → `jobService.createJobService`:
+   - Validates that `userId` is present.
    - Generates a unique `jobId` (`job_<timestamp>_<random>`).
-   - Persists the job (`status: PENDING`) in **MongoDB**.
-   - Optionally caches the `jobId` against the idempotency key in Redis (TTL 24h).
+   - Persists the job (`status: PENDING`, `userId`, `idempotencyKey`) in **MongoDB**.
+   - If an idempotency key was provided, caches `jobId` in Redis under `idempotency:<userId>:<key>` (TTL 24h).
    - Calls `addJobToQueue` to place it on the BullMQ queue with its attempts/priority.
 
 ### Worker Processing Flow
@@ -171,13 +189,14 @@ Rather than permanently discarding dead jobs, they're:
 
 Locks are used for unique job execution and safe DLQ retries.
 
-### Idempotency
+### Idempotency & User Scoping
 
 [idempotency.js](file:///d:/Backend/Backend%20Projects/Distributed%20Job%20Processing%20Platform/backend/src/middleware/idempotency.js):
 - Reads the `Idempotency-Key` request header.
-- Checks Redis (`idempotency:<key>`) for an existing `jobId` — if found, returns the **existing job** (`200`, `isDuplicate: true`) instead of creating a new one.
-- Otherwise attaches the key to the request so the service can bind & persist it.
-- Keys are stored in Redis with a **24-hour TTL**, while the DB also enforces a **unique `idempotencyKey`** index as a second layer of protection.
+- Constructs a **user-scoped Redis key**: `idempotency:<userId>:<idempotencyKey>`. This ensures multiple users can safely send identical keys without collisions.
+- Checks Redis for an existing `jobId` — if found and belongs to the user, immediately returns the **existing job** (`200 OK`, `isDuplicate: true`) without creating a duplicate task or placing it on the queue.
+- Otherwise attaches the key and redisKey to `req` so `jobService.createJobService` can bind & persist it in MongoDB and save it to Redis with a **24-hour TTL**.
+- At the database level, MongoDB enforces a **compound unique + sparse index** on `{ userId: 1, idempotencyKey: 1 }`, guaranteeing strict uniqueness per tenant.
 
 ### Backpressure Control
 
@@ -202,15 +221,18 @@ Locks are used for unique job execution and safe DLQ retries.
 
 ---
 
-## 🔒 Security Summary
+## 🔒 Security & Multi-Tenancy Summary
 
 - **Helmet** security headers configured.
 - **CORS** restricted to `CLIENT_URL` with `credentials: true`.
-- Passwords **bcrypt-hashed** (10 salt rounds); password and refresh token are `select: false` in the schema.
+- Passwords **bcryptjs-hashed** (10 salt rounds); password and refresh token are `select: false` in the schema.
 - **JWT access tokens** (15m) + **refresh tokens** (7d) with **rotation** (hashed `sha256` stored in DB) and logout invalidation.
-- Tokens delivered via **httpOnly, `sameSite`-aware cookies** (JS can't read them).
+- Tokens delivered via **httpOnly, `sameSite`-aware cookies** (JS cannot read them; optional bearer fallback for flexibility).
+- **Tenant Data Isolation**: Every job document binds `userId`. All job retrieval (`GET /jobs`), DLQ listing (`GET /jobs/dead`), cancellation (`DELETE /jobs/:id`), retries (`POST /jobs/:id/retry`), and status statistics are strictly filtered by authenticated `req.user._id`.
+- **Compound Database Indexes**:
+  - `{ userId: 1, idempotencyKey: 1 }` (unique, sparse) for per-user idempotency.
+  - `{ userId: 1, status: 1, createdAt: -1 }` and `{ status: 1, createdAt: -1 }` for high-performance scoped monitoring queries.
 - Centralized global **error handler** that avoids leaking stack traces in production.
-- Unique + sparse indexes on `idempotencyKey`, unique `jobId`, compound index on `{status, createdAt}` for fast monitoring queries.
 
 ---
 

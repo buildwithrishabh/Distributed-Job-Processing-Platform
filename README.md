@@ -67,8 +67,8 @@ A client submits a job via `POST /api/jobs`. The Express API processes it throug
 
 ## 🛠️ Technology Stack
 
-*   **Backend**: Node.js 20, Express 5, BullMQ 6, Redis 7 (via `ioredis`), MongoDB 7, Mongoose 9, Zod 4 (validation), JWT & Bcrypt (security).
-*   **Frontend**: React 18, Vite, React Router 7, TanStack Query 5, Axios (with single-flight refresh interception), Tailwind CSS.
+*   **Backend**: Node.js 20, Express 5, BullMQ 6, Redis 7 (via `ioredis`), MongoDB 7, Mongoose 9, Zod 4 (schema validation), JWT & Bcryptjs (security), Helmet & Morgan.
+*   **Frontend**: React 18, Vite, React Router 7, TanStack Query 5, Axios (with single-flight refresh interception), Lucide React (icons), Custom Layered Vanilla CSS Design System (with light/dark mode and zero framework overhead).
 
 ---
 
@@ -122,34 +122,44 @@ npm run dev
 
 ## 🔌 API Endpoints
 
-All endpoints except authentication require a valid JWT access token (provided via the `Authorization: Bearer <token>` header or `accessToken` cookie).
+All endpoints except authentication and health checks require a valid JWT access token (provided via the `Authorization: Bearer <token>` header or `accessToken` httpOnly cookie).
 
 ### Auth — `/api/auth`
-- `POST /auth/register` - Create user account
-- `POST /auth/login` - Authenticate and set credentials in httpOnly cookies
-- `POST /auth/refresh` - Rotate access/refresh tokens
-- `POST /auth/logout` - Clear cookies and invalidate session
-- `GET  /auth/me` - Fetch details of the current logged-in user
+- `POST /api/auth/register` - Create user account
+- `POST /api/auth/login` - Authenticate and set credentials in httpOnly cookies
+- `POST /api/auth/refresh` - Rotate access/refresh tokens
+- `POST /api/auth/logout` - Clear cookies and invalidate session
+- `GET  /api/auth/me` - Fetch details of the current logged-in user
 
 ### Jobs & DLQ — `/api/jobs`
-- `POST /` - Enqueue a job (supports `Idempotency-Key` header)
-- `GET  /` - Paginated job query (filtered by status)
-- `GET  /:id` - Fetch job status and details by ID
-- `DELETE /:id` - Cancel a `PENDING` job
-- `GET  /dead` - Retrieve quarantined `DEAD` jobs (DLQ)
-- `POST /:id/retry` - Re-enqueue a failed/dead job back to `PENDING`
+- `POST /api/jobs` - Enqueue a job (supports `Idempotency-Key` header, scoped to user)
+- `GET  /api/jobs` - Paginated job query (filtered by status, scoped to user)
+- `GET  /api/jobs/:id` - Fetch job status and details by ID
+- `DELETE /api/jobs/:id` - Cancel a `PENDING` job
+- `GET  /api/jobs/dead` - Retrieve quarantined `DEAD` jobs (DLQ, scoped to user)
+- `POST /api/jobs/:id/retry` - Re-enqueue a failed/dead job back to `PENDING` (protected by Redis lock)
 
 ### Monitoring — `/api/monitoring`
-- `GET /overview` - System metrics summary (queue size, jobs by status, worker heartbeats)
+- `GET /api/monitoring/overview` - Consolidated system metrics (queue, user job stats, worker cluster)
+- `GET /api/monitoring/queue` - BullMQ queue counts (`waiting`, `active`, `delayed`, `failed`, `completed`)
+- `GET /api/monitoring/jobs` - Status breakdown for the authenticated user's jobs
+- `GET /api/monitoring/workers` - Active worker list with heartbeats and health classification (`HEALTHY`, `STALE`, `DEAD`)
+
+### Health Checks
+- `GET /health` - Root API server health status check (`{ status: "OK", timestamp }`)
+- `GET :10000/` - Worker process HTTP health check (used for Render deployment / port detection)
 
 ---
 
 ## 🖥️ Frontend Overview
 
-A monitoring dashboard is provided at `http://localhost:5173`. It integrates with the API routes to display:
-- **Queue Metrics**: Jobs currently waiting, active, delayed, or failed.
-- **Worker Clusters**: Real-time status cards of active worker processes based on heartbeats.
-- **DLQ Management**: Interface to view error details/stack traces and manually retry quarantined jobs.
+A monitoring and management web app is provided at `http://localhost:5173`. Key modules include:
+- **System Dashboard**: Real-time queue metrics, status distribution, and active worker node summary.
+- **Job Management Table**: Status filtering, client-side search, payload inspection in a slide-out drawer, and job cancellation.
+- **Dead Letter Queue (DLQ)**: Quarantined jobs table with error stack traces, failure attempts, and 1-click retry.
+- **Worker Cluster Inspector**: Live heartbeat cards displaying worker PIDs, memory usage, uptime, and freshness statuses.
+- **Interactive Job Submission**: Modal dialog supporting custom JSON payloads, job types, execution priorities, and custom idempotency keys.
+- **Settings & Theme**: Configurable query polling lag (5s, 10s, 30s, or off) and full light/dark theme toggle.
 
 ---
 
