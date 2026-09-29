@@ -1,0 +1,23 @@
+{
+  "name": "distributed-job-processing-platform",
+  "version": "1.0.0",
+  "description": "High-Throughput Distributed Background Job Processing Platform with Redis, BullMQ, and Modern React Dashboard",
+  "scripts": {
+    "dev:backend": "npm --prefix backend run dev",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "worker": "npm --prefix backend run worker",
+    "build:frontend": "npm --prefix frontend run build",
+    "docker:up": "docker-compose -f backend/docker-compose.yml up --build",
+    "docker:down": "docker-compose -f backend/docker-compose.yml down"
+  },
+  "keywords": [
+    "bullmq",
+    "redis",
+    "job-queue",
+    "distributed-systems",
+    "react",
+    "dashboard"
+  ],
+  "author": "",
+  "license": "ISC"
+}

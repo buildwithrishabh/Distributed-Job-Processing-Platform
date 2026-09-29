@@ -1,0 +1,315 @@
+/* ==========================================================================
+   Design tokens
+   Dark is the default theme. Light theme overrides the semantic layer only,
+   so every component is written once against semantic names.
+   ========================================================================== */
+
+:root {
+  /* ---------- Raw palette (theme independent) ---------- */
+  --violet-50: #f2f0ff;
+  --violet-200: #cfc7ff;
+  --violet-300: #b3a6ff;
+  --violet-400: #9b8bff;
+  --violet-500: #7b61ff;
+  --violet-600: #6a4df0;
+  --violet-700: #553ac2;
+
+  --cyan-300: #67e8f9;
+  --cyan-400: #22d3ee;
+  --cyan-500: #06b6d4;
+
+  --emerald-300: #6ee7b7;
+  --emerald-400: #34d399;
+  --emerald-500: #10b981;
+
+  --amber-300: #fcd34d;
+  --amber-400: #fbbf24;
+  --amber-500: #f59e0b;
+
+  --orange-400: #fb923c;
+  --rose-300: #fda4af;
+  --rose-400: #fb7185;
+  --rose-500: #f43f5e;
+
+  --sky-300: #7dd3fc;
+  --sky-400: #38bdf8;
+  --sky-500: #0ea5e9;
+
+  --fuchsia-300: #f0abfc;
+  --fuchsia-400: #e879f9;
+  --fuchsia-500: #d946ef;
+
+  --slate-100: #f1f5f9;
+  --slate-300: #cbd5e1;
+  --slate-400: #94a3b8;
+  --slate-500: #64748b;
+  --slate-600: #475569;
+  --slate-700: #334155;
+  --slate-800: #1e293b;
+  --slate-900: #0f172a;
+
+  /* ---------- Typography ---------- */
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo,
+    Consolas, "Liberation Mono", monospace;
+
+  --text-2xs: 0.6875rem; /* 11px */
+  --text-xs: 0.75rem; /* 12px */
+  --text-sm: 0.8125rem; /* 13px */
+  --text-base: 0.875rem; /* 14px */
+  --text-md: 0.9375rem; /* 15px */
+  --text-lg: 1.0625rem; /* 17px */
+  --text-xl: 1.25rem; /* 20px */
+  --text-2xl: 1.5rem; /* 24px */
+  --text-3xl: 1.9375rem; /* 31px */
+  --text-4xl: 2.5rem; /* 40px */
+
+  --leading-tight: 1.2;
+  --leading-snug: 1.4;
+  --leading-normal: 1.6;
+  --leading-relaxed: 1.75;
+
+  --tracking-tight: -0.02em;
+  --tracking-normal: 0;
+  --tracking-wide: 0.04em;
+  --tracking-widest: 0.12em;
+
+  /* ---------- Spacing scale ---------- */
+  --space-0: 0;
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-7: 1.75rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+  --space-20: 5rem;
+
+  /* ---------- Radii ---------- */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 9px;
+  --radius-lg: 13px;
+  --radius-xl: 18px;
+  --radius-2xl: 24px;
+  --radius-full: 9999px;
+
+  /* ---------- Motion ---------- */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  --duration-instant: 80ms;
+  --duration-fast: 150ms;
+  --duration-normal: 220ms;
+  --duration-slow: 380ms;
+
+  /* ---------- Layout ---------- */
+  --sidebar-w: 244px;
+  --sidebar-w-collapsed: 68px;
+  --topbar-h: 60px;
+  --content-max: 1600px;
+
+  --z-base: 0;
+  --z-sticky: 20;
+  --z-dropdown: 40;
+  --z-overlay: 60;
+  --z-modal: 80;
+  --z-toast: 100;
+  --z-tooltip: 120;
+
+  /* ---------- Brand (theme independent) ---------- */
+  --brand-primary: var(--violet-500);
+  --brand-primary-hover: var(--violet-400);
+  --brand-accent: var(--cyan-400);
+
+  --chart-1: var(--violet-400);
+  --chart-2: var(--cyan-400);
+  --chart-3: var(--emerald-400);
+  --chart-4: var(--amber-400);
+  --chart-5: var(--rose-400);
+  --chart-6: var(--fuchsia-400);
+}
+
+/* ==========================================================================
+   Dark theme (default)
+   ========================================================================== */
+:root,
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg-base: #0a0c11;
+  --bg-sunken: #06080b;
+  --bg-surface: #101319;
+  --bg-raised: #161a22;
+  --bg-overlay: rgba(4, 6, 10, 0.74);
+  --bg-inset: #0c0f14;
+  --bg-hover: rgba(255, 255, 255, 0.04);
+  --bg-active: rgba(255, 255, 255, 0.07);
+  --bg-scrim: rgba(0, 0, 0, 0.5);
+
+  --border-subtle: #1b202a;
+  --border-default: #242b36;
+  --border-strong: #333c4a;
+  --border-inverse: #e8ecf1;
+
+  --text-primary: #e9edf3;
+  --text-secondary: #98a3b3;
+  --text-tertiary: #6a7583;
+  --text-disabled: #4b5563;
+  --text-inverse: #0a0c11;
+  --text-brand: var(--violet-300);
+
+  --primary: var(--violet-500);
+  --primary-hover: var(--violet-400);
+  --primary-active: var(--violet-600);
+  --primary-text: #ffffff;
+  --primary-soft: rgba(123, 97, 255, 0.15);
+  --primary-soft-hover: rgba(123, 97, 255, 0.22);
+  --primary-border: rgba(123, 97, 255, 0.4);
+  --primary-glow: rgba(123, 97, 255, 0.35);
+
+  --accent: var(--cyan-400);
+  --accent-soft: rgba(34, 211, 238, 0.14);
+  --accent-text: var(--cyan-300);
+
+  --success: var(--emerald-400);
+  --success-soft: rgba(52, 211, 153, 0.14);
+  --success-text: var(--emerald-300);
+  --success-border: rgba(52, 211, 153, 0.32);
+
+  --warning: var(--amber-400);
+  --warning-soft: rgba(251, 191, 36, 0.14);
+  --warning-text: var(--amber-300);
+  --warning-border: rgba(251, 191, 36, 0.32);
+
+  --danger: var(--rose-400);
+  --danger-soft: rgba(251, 113, 133, 0.14);
+  --danger-text: var(--rose-300);
+  --danger-border: rgba(251, 113, 133, 0.32);
+
+  --info: var(--sky-400);
+  --info-soft: rgba(56, 189, 248, 0.14);
+  --info-text: var(--sky-300);
+  --info-border: rgba(56, 189, 248, 0.32);
+
+  --status-pending: var(--amber-400);
+  --status-processing: var(--sky-400);
+  --status-completed: var(--emerald-400);
+  --status-failed: var(--rose-400);
+  --status-retrying: var(--orange-400);
+  --status-dead: var(--fuchsia-400);
+  --status-cancelled: var(--slate-500);
+
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.45), 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 10px -2px rgba(0, 0, 0, 0.5), 0 2px 5px -3px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 12px 24px -6px rgba(0, 0, 0, 0.6), 0 6px 10px -6px rgba(0, 0, 0, 0.45);
+  --shadow-xl: 0 28px 56px -12px rgba(0, 0, 0, 0.7), 0 12px 20px -12px rgba(0, 0, 0, 0.5);
+  --shadow-glow: 0 0 0 1px rgba(123, 97, 255, 0.35), 0 0 28px -6px rgba(123, 97, 255, 0.4);
+
+  --grid-line: rgba(255, 255, 255, 0.022);
+  --grid-dot: rgba(255, 255, 255, 0.05);
+  --ring: 0 0 0 3px rgba(123, 97, 255, 0.32);
+  --ring-danger: 0 0 0 3px rgba(251, 113, 133, 0.32);
+  --scrollbar-thumb: #2b3340;
+  --scrollbar-thumb-hover: #3a4453;
+  --code-bg: #080a0e;
+}
+
+/* ==========================================================================
+   Light theme
+   ========================================================================== */
+[data-theme="light"] {
+  color-scheme: light;
+
+  --bg-base: #f7f8fa;
+  --bg-sunken: #eef0f4;
+  --bg-surface: #ffffff;
+  --bg-raised: #ffffff;
+  --bg-overlay: rgba(19, 24, 33, 0.42);
+  --bg-inset: #f4f6f9;
+  --bg-hover: rgba(15, 23, 42, 0.04);
+  --bg-active: rgba(15, 23, 42, 0.07);
+  --bg-scrim: rgba(15, 23, 42, 0.28);
+
+  --border-subtle: #edeff3;
+  --border-default: #e0e4eb;
+  --border-strong: #c3cad6;
+  --border-inverse: #0f172a;
+
+  --text-primary: #0f1729;
+  --text-secondary: #4d5a6d;
+  --text-tertiary: #79869a;
+  --text-disabled: #a3aebd;
+  --text-inverse: #ffffff;
+  --text-brand: var(--violet-700);
+
+  --primary: var(--violet-600);
+  --primary-hover: var(--violet-500);
+  --primary-active: var(--violet-700);
+  --primary-text: #ffffff;
+  --primary-soft: rgba(106, 77, 240, 0.09);
+  --primary-soft-hover: rgba(106, 77, 240, 0.15);
+  --primary-border: rgba(106, 77, 240, 0.28);
+  --primary-glow: rgba(106, 77, 240, 0.2);
+
+  --accent: var(--cyan-500);
+  --accent-soft: rgba(6, 182, 212, 0.1);
+  --accent-text: #0e7490;
+
+  --success: var(--emerald-500);
+  --success-soft: rgba(16, 185, 129, 0.11);
+  --success-text: #047857;
+  --success-border: rgba(16, 185, 129, 0.28);
+
+  --warning: var(--amber-500);
+  --warning-soft: rgba(245, 158, 11, 0.12);
+  --warning-text: #b45309;
+  --warning-border: rgba(245, 158, 11, 0.3);
+
+  --danger: var(--rose-500);
+  --danger-soft: rgba(244, 63, 94, 0.1);
+  --danger-text: #be123c;
+  --danger-border: rgba(244, 63, 94, 0.28);
+
+  --info: var(--sky-500);
+  --info-soft: rgba(14, 165, 233, 0.1);
+  --info-text: #0369a1;
+  --info-border: rgba(14, 165, 233, 0.28);
+
+  --status-pending: var(--amber-500);
+  --status-processing: var(--sky-500);
+  --status-completed: var(--emerald-500);
+  --status-failed: var(--rose-500);
+  --status-retrying: var(--orange-400);
+  --status-dead: var(--fuchsia-500);
+  --status-cancelled: #64748b;
+
+  --shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.05);
+  --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.08), 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-md: 0 4px 12px -2px rgba(15, 23, 42, 0.09), 0 2px 5px -3px rgba(15, 23, 42, 0.06);
+  --shadow-lg: 0 14px 28px -6px rgba(15, 23, 42, 0.12), 0 6px 10px -6px rgba(15, 23, 42, 0.07);
+  --shadow-xl: 0 28px 56px -12px rgba(15, 23, 42, 0.18), 0 12px 22px -12px rgba(15, 23, 42, 0.1);
+  --shadow-glow: 0 0 0 1px rgba(106, 77, 240, 0.28), 0 0 24px -8px rgba(106, 77, 240, 0.35);
+
+  --grid-line: rgba(15, 23, 42, 0.02);
+  --grid-dot: rgba(15, 23, 42, 0.06);
+  --ring: 0 0 0 3px rgba(106, 77, 240, 0.2);
+  --ring-danger: 0 0 0 3px rgba(244, 63, 94, 0.2);
+  --scrollbar-thumb: #cdd4de;
+  --scrollbar-thumb-hover: #aeb8c6;
+  --code-bg: #0d1117;
+
+  --chart-1: var(--violet-500);
+  --chart-2: var(--cyan-500);
+  --chart-3: var(--emerald-500);
+  --chart-4: var(--amber-500);
+  --chart-5: var(--rose-500);
+  --chart-6: var(--fuchsia-500);
+}
