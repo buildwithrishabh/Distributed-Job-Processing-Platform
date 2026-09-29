@@ -66,8 +66,13 @@ const jobSchema = new mongoose.Schema(
 jobSchema.index({ status: 1, createdAt: -1 });
 jobSchema.index({ userId: 1, createdAt: -1 });
 jobSchema.index({ userId: 1, status: 1, createdAt: -1 });
-jobSchema.index({ userId: 1, idempotencyKey: 1 }, { unique: true, sparse: true }); // ✅ Per user unique
-
+jobSchema.index(
+  { userId: 1, idempotencyKey: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { idempotencyKey: { $type: "string" } },
+  },
+); // ✅ Per user unique
 
 const Job = mongoose.model("Job", jobSchema);
 

@@ -12,7 +12,9 @@ const startWorkerProcess = async () => {
 
     const os = require("os");
     const containerHost = os.hostname();
-    const workerId = process.env.WORKER_ID || `worker_${containerHost}_${process.pid}`;
+    const workerId = (process.env.WORKER_ID && process.env.WORKER_ID !== "worker_1")
+      ? `${process.env.WORKER_ID}_${containerHost}`
+      : `worker_${containerHost}`;
     const concurrency = Number(process.env.WORKER_CONCURRENCY) || 5;
 
     

@@ -28,7 +28,7 @@ const createJobService = async ({
     status: JOB_STATUS.PENDING,
     priority,
     maxAttempts,
-    idempotencyKey,    // comes from header sent by client (we are saving it)
+    ...(idempotencyKey ? { idempotencyKey } : {}), // comes from header sent by client (only stored if provided)
     userId,
   });
 
