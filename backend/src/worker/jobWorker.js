@@ -23,20 +23,24 @@ const createJobWorker = (workerId, concurrency = 5) => {
         console.log(
           `[${workerId}] Job ${jobId} is already being processed by another worker. Skipping.`,
         );
-        return {
-          skipped: true,
-          reason: "Job is already being processed by another worker",
-        };
+
+        throw new Error(`Could not acquire lock for job: ${jobId}`);
       }
 
       try {
         // Check MongoDb for existing Job state
         const dbJob = await Job.findOne({ jobId });
 
-        // If Job i cancelled or deleted, skip execution immediately
+        // If Job  cancelled or deleted, skip execution immediately
         if (!dbJob) {
           console.log(`[${workerId}] Job ${jobId} not found in DB. Skipping.`);
           return { skipped: true, reason: "Job not found in database" };
+        }
+
+        // IF Job already completed to skip the job
+        if (dbJob.status === JOB_STATUS.COMPLETED) {
+          console.log(`[${workerId}] Job ${jobId} already Completed. Skipping.`);
+          return { skipped: true, reason: "Job already completed" };
         }
 
         if (dbJob.status === JOB_STATUS.CANCELLED) {
@@ -46,11 +50,11 @@ const createJobWorker = (workerId, concurrency = 5) => {
           return { skipped: true, reason: "Job was cancelled by user" };
         }
 
-        // Atomic update to PROCESSING (only if status is NOT CANCELLED)
+        // Atomic update to PROCESSING (only allow from PENDING or RETRYING)
         const processingDb = await Job.findOneAndUpdate(
           {
             jobId,
-            status: { $ne: JOB_STATUS.CANCELLED },
+            status: { $in: [JOB_STATUS.PENDING, JOB_STATUS.RETRYING] },
           },
           {
             status: JOB_STATUS.PROCESSING,
@@ -84,7 +88,7 @@ const createJobWorker = (workerId, concurrency = 5) => {
         await Job.findOneAndUpdate(
           {
             jobId,
-            status: JOB_STATUS.PROCESSING
+            status: JOB_STATUS.PROCESSING,
           },
           {
             status: JOB_STATUS.COMPLETED,
@@ -121,7 +125,10 @@ const createJobWorker = (workerId, concurrency = 5) => {
     );
 
     await Job.findOneAndUpdate(
-      { jobId },
+      {
+        jobId,
+        status: { $nin: [JOB_STATUS.COMPLETED, JOB_STATUS.CANCELLED] },
+      },
       {
         status: newStatus,
         failedAt: new Date(),

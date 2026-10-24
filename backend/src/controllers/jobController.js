@@ -15,6 +15,19 @@ const createJob = async (req, res, next) => {
       idempotencyRedisKey: req.idempotencyRedisKey,
     });
 
+    if (job._isDuplicate) {
+      return res.status(200).json({
+        message: "Duplicate request acknowledged. Returning existing job.",
+        isDuplicate: true,
+        job: {
+          jobId: job.jobId,
+          type: job.type,
+          status: job.status,
+          createdAt: job.createdAt,
+        },
+      });
+    }
+
     return res.status(202).json({
       message: "Job accepted and enqueued",
       job: {

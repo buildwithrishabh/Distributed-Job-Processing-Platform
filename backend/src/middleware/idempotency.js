@@ -1,8 +1,10 @@
-const  redisClient = require("../config/redis");
+const redisClient = require("../config/redis");
 const Job = require("../models/job");
 
 const IDEMPOTENCY_PREFIX = "idempotency:";
 const DEFAULT_TTL_SECONDS = 86400; // 24 Hours
+
+const IDEMPOTENCY_LOCK_TTL = 30;
 
 const idempotencyMiddleware = async (req, res, next) => {
   const idempotencyKey = req.headers["idempotency-key"];
@@ -15,26 +17,51 @@ const idempotencyMiddleware = async (req, res, next) => {
   const redisKey = `${IDEMPOTENCY_PREFIX}${userPrefix}${idempotencyKey}`;
 
   try {
-    const cachedJobId = await redisClient.get(redisKey);
+    // 1. ATOMIC LOCK: Set Key to "IN_PROGRESS"  only if it does not exits(NX)
+    const acquired = await redisClient.set(
+      redisKey,
+      "IN_PROGRESS",
+      "EX",
+      IDEMPOTENCY_LOCK_TTL,
+      "NX",
+    );
 
-    if (cachedJobId) {
-      console.log(
-        `[Idempotency] Duplicate request detected for key: ${idempotencyKey}. Cached JobId: ${cachedJobId}`,
-      );
+    // 2. Lock nahi mila (key already exists)
+    if (!acquired) {
+      const cachedValue = await redisClient.get(redisKey);
 
-      const existingJob = await Job.findOne({ jobId: cachedJobId , userId: req.user?._id});
-
-      if (existingJob) {
-        return res.status(200).json({
-          message: "Duplicate request acknowledged. Returning existing job.",
-          isDuplicate: true,
-          job: {
-            jobId: existingJob.jobId,
-            type: existingJob.type,
-            status: existingJob.status,
-            createdAt: existingJob.createdAt,
-          },
+      // CASE A: Parallel request already in-progress
+      if (cachedValue === "IN_PROGRESS") {
+        return res.status(409).json({
+          success: false,
+          error:
+            "A request with this Idempotency-Key is currently being processed. Please retry shortly.",
         });
+      }
+
+      // CASE B: Job already created (cachedValue is jobId)
+      if (cachedValue) {
+        console.log(
+          `[Idempotency] Duplicate request detected for key: ${idempotencyKey}. Cached JobId: ${cachedValue}`,
+        );
+
+        const existingJob = await Job.findOne({
+          jobId: cachedValue,
+          userId: req.user?._id,
+        });
+
+        if (existingJob) {
+          return res.status(200).json({
+            message: "Duplicate request acknowledged. Returning existing job.",
+            isDuplicate: true,
+            job: {
+              jobId: existingJob.jobId,
+              type: existingJob.type,
+              status: existingJob.status,
+              createdAt: existingJob.createdAt,
+            },
+          });
+        }
       }
     }
 
@@ -48,7 +75,6 @@ const idempotencyMiddleware = async (req, res, next) => {
     next(error);
   }
 };
-
 
 const saveIdempotency = async (redisKey, jobId, ttl = DEFAULT_TTL_SECONDS) => {
   await redisClient.set(redisKey, jobId, "EX", ttl);
