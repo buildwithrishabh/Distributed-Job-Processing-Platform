@@ -10,6 +10,7 @@ const app = require("./app");
 const connectDB = require("./config/db");
 const env = require("./config/env");
 const redisClient = require("./config/redis");
+const { startOrphanJobSweeper } = require("./cron/orphanJobSweeper");
 
 const startServer = async () => {
   await connectDB();
@@ -21,9 +22,18 @@ const startServer = async () => {
     );
   });
 
+  // Start Orphan Job Sweeper (recovers stuck PENDING jobs)
+  const stopSweeper = startOrphanJobSweeper();
+  console.log("[Sweeper] Orphan job sweeper started.");
+
   // 2. Graceful Shutdown Handler
   const shutdown = async (signal) => {
     console.log(`[HTTP Server] ${signal} received. Closing HTTP server...`);
+
+    if (stopSweeper) {
+      stopSweeper();
+      console.log("[Sweeper] Orphan job sweeper stopped.");
+    }
 
     server.close(async () => {
       console.log("[HTTP Server] HTTP server closed.");

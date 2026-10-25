@@ -37,7 +37,30 @@ const createJobService = async ({
       await saveIdempotencyKey(idempotencyRedisKey, jobId);
     }
 
-    await addJobToQueue(DbJob);
+    try {
+      await addJobToQueue(DbJob);
+    } catch (error) {
+      console.error(`[Queue Error] Failed to enqueue job ${jobId}:`, error);
+
+      // Rollback / Mark as FAILED in MongoDB
+      await Job.findByIdAndUpdate(DbJob._id, {
+        status: JOB_STATUS.FAILED,
+        failedAt: new Date(),
+        error: {
+          message: `Failed to enqueue job to Redis/BullMQ: ${error.message}`,
+          failedAt: new Date(),
+        },
+      });
+
+      // Clear idempotency so user can safely retry
+      if (idempotencyRedisKey) {
+        await redisClient.del(idempotencyRedisKey).catch(() => {});
+      }
+
+      const err = new Error("Failed to enqueue job to processing queue");
+      err.statusCode = 503;
+      throw err;
+    }
 
     return DbJob;
   } catch (error) {
@@ -58,9 +81,9 @@ const createJobService = async ({
       }
     }
 
-    // If Job creation fails -> remove redis lock for retry 
-    if (idempotencyRedisKey){
-      await redisClient.del(idempotencyRedisKey).catch(()=> {});
+    // If Job creation fails -> remove redis lock for retry
+    if (idempotencyRedisKey) {
+      await redisClient.del(idempotencyRedisKey).catch(() => {});
     }
 
     throw error;
