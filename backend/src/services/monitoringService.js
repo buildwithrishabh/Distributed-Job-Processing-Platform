@@ -37,9 +37,11 @@ const getJobStatsService = async (userId) => {
   const formattedStats = {
     PENDING: 0,
     PROCESSING: 0,
+    RETRYING: 0,
     COMPLETED: 0,
     FAILED: 0,
     DEAD: 0,
+    CANCELLED: 0,
     total: 0,
   };
 
