@@ -1,14 +1,28 @@
-function withTimeout(asyncFnPromise, timeoutMs = 10000) {
+function withTimeout(asyncTaskFn, timeoutMs = 10000) {
+  const controller = new AbortController();
   let timerId;
 
   const timeoutPromise = new Promise((_, reject) => {
     timerId = setTimeout(() => {
-      reject(new Error(`Job Execution Timed Out after ${timeoutMs}ms`));
+      // 1. In-flight HTTP / background task to physically abort
+      controller.abort();
+
+      const err = new Error(`Job Execution Timed Out after ${timeoutMs}ms`);
+      err.name = "TimeoutError";
+      reject(err);
     }, timeoutMs);
   });
 
-  return Promise.race([asyncFnPromise, timeoutPromise]).finally(() => {
-    clearTimeout(timerId); // Prevent Node.js timer memory leak
+  // asyncTaskFn ko controller.signal pass karo
+  const taskPromise = asyncTaskFn(controller.signal);
+
+  // Attach silent catch to handle late abort rejections safely
+  if (taskPromise && typeof taskPromise.catch === "function") {
+    taskPromise.catch(() => {});
+  }
+
+  return Promise.race([taskPromise, timeoutPromise]).finally(() => {
+    clearTimeout(timerId); // Memory leak prevention
   });
 }
 

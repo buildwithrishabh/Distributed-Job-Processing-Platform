@@ -9,14 +9,14 @@ const processorRegistry = {
 /**
  * Dispatch job payload to registered processor
  */
-async function processJobDispatch(type, payload, bullJob) {
+async function processJobDispatch(type, payload, bullJob , signal ) {
   const processor = processorRegistry[type];
 
   if (!processor) {
     throw new Error(`Unsupported job type: "${type}". No registered processor found.`);
   }
 
-  return await processor(payload, bullJob);
+  return await processor(payload, bullJob , signal);
 }
 
 module.exports = {

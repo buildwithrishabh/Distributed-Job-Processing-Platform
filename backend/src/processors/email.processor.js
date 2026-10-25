@@ -4,7 +4,7 @@ const env = require("../config/env");
 /**
  * Processor for Email Sending Jobs with Brevo API integration and fallback simulation.
  */
-async function emailProcessor(payload, bullJob) {
+async function emailProcessor(payload, bullJob, signal) {
   const { to, subject, body, html, text } = payload || {};
 
   // 1. Permanent Failure Check: Throw UnrecoverableError so BullMQ does NOT retry invalid payloads!
@@ -65,6 +65,7 @@ async function emailProcessor(payload, bullJob) {
         "api-key": apiKey,
       },
       body: JSON.stringify(requestBody),
+      signal,
     });
 
     const responseData = await response.json().catch(() => ({}));

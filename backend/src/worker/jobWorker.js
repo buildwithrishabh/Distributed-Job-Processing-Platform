@@ -80,8 +80,8 @@ const createJobWorker = (workerId, concurrency = 5) => {
         );
 
         // Execute dispatch to matched job processor strategy with timeout wrapper
-        const result = await withTimeout(
-          processJobDispatch(type, payload, job),
+        const result = await withTimeout((signal) => 
+          processJobDispatch(type, payload, job , signal ),
           JOB_TIMEOUT_MS,
         );
 
