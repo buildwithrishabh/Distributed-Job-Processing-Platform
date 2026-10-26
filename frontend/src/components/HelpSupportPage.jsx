@@ -523,7 +523,7 @@ ${diagResult.errors.length > 0 ? `\n**Errors:**\n${diagResult.errors.map((e) => 
           <div className="support-ticker-item">
             <span
               className={`status-pulse ${
-                diagResult?.apiLatencyMs !== null && diagResult?.errors?.length === 0
+                diagResult?.apiLatencyMs != null && diagResult?.errors?.length === 0
                   ? "online"
                   : "warning"
               }`}
@@ -533,7 +533,7 @@ ${diagResult.errors.length > 0 ? `\n**Errors:**\n${diagResult.errors.map((e) => 
               <span className="ticker-val">
                 {diagLoading
                   ? "Checking..."
-                  : diagResult?.apiLatencyMs !== null
+                  : diagResult?.apiLatencyMs != null
                   ? `Online (${diagResult.apiLatencyMs}ms)`
                   : "Unavailable"}
               </span>
@@ -909,17 +909,17 @@ ${diagResult.errors.length > 0 ? `\n**Errors:**\n${diagResult.errors.map((e) => 
                   </div>
                   <span
                     className={`diag-badge ${
-                      diagResult?.apiLatencyMs !== null ? "success" : "error"
+                      diagResult?.apiLatencyMs != null ? "success" : "error"
                     }`}
                   >
-                    {diagResult?.apiLatencyMs !== null ? "PASS" : "FAIL"}
+                    {diagResult?.apiLatencyMs != null ? "PASS" : "FAIL"}
                   </span>
                 </div>
                 <h3>REST API Connectivity</h3>
                 <p>Calculates round-trip HTTP response time between browser and API gateway.</p>
                 <div className="diag-stat-row">
                   <span>Round-Trip Latency:</span>
-                  <strong>{diagResult?.apiLatencyMs !== null ? `${diagResult.apiLatencyMs} ms` : "Failed"}</strong>
+                  <strong>{diagResult?.apiLatencyMs != null ? `${diagResult.apiLatencyMs} ms` : "Failed"}</strong>
                 </div>
                 <div className="diag-stat-row">
                   <span>Proxy Endpoint:</span>
