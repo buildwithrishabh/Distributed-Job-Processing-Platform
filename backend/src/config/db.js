@@ -1,5 +1,11 @@
+const dns = require('dns');
 const mongoose = require('mongoose');
-const { MONGO_URI } = require('./env');
+const { MONGO_URI, NODE_ENV } = require('./env');
+
+// In Development use DNS to start mongodb
+if (NODE_ENV !== 'production') {
+  dns.setServers(['8.8.8.8', '1.1.1.1']);
+}
 
 const connectDB = async () => {
   try {

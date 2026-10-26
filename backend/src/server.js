@@ -1,10 +1,3 @@
-const dns = require("dns")
-
-if (process.env.DNS_SERVERS){
-  const server = process.env.DNS_SERVERS.split(",").map((s) => s.trim())
-  dns.setServers(server)
-}
-
 const mongoose = require("mongoose");
 const app = require("./app");
 const connectDB = require("./config/db");
