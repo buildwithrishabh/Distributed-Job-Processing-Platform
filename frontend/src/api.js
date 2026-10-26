@@ -1,6 +1,5 @@
-// In development use Vite's same-origin proxy; in deployments the API URL can
-// be supplied explicitly (for example, https://api.example.com/api).
-const API_URL = (import.meta.env.VITE_API_URL || "/api").replace(/\/$/, "");
+const rawApiUrl = (import.meta.env.VITE_API_URL || "/api").trim().replace(/\/+$/, "");
+const API_URL = rawApiUrl.endsWith("/api") ? rawApiUrl : `${rawApiUrl}/api`;
 
 let authToken = typeof window !== "undefined" ? localStorage.getItem("job_platform_token") : null;
 

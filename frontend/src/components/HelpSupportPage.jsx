@@ -101,7 +101,12 @@ export function HelpSupportPage({ onNavigate, onCreate, notify }) {
       });
       if (authRes) {
         result.authStatus = "ok";
-        result.userName = authRes.name || authRes.email || "User";
+        result.userName =
+          authRes.user?.name ||
+          authRes.user?.email ||
+          authRes.name ||
+          authRes.email ||
+          "User";
       } else {
         result.authStatus = "error";
       }
