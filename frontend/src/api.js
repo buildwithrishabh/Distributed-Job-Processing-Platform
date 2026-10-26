@@ -2,9 +2,21 @@
 // be supplied explicitly (for example, https://api.example.com/api).
 const API_URL = (import.meta.env.VITE_API_URL || "/api").replace(/\/$/, "");
 
+let authToken = typeof window !== "undefined" ? localStorage.getItem("job_platform_token") : null;
+
+export const setAuthToken = (token) => {
+  authToken = token;
+  if (typeof window !== "undefined") {
+    if (token) localStorage.setItem("job_platform_token", token);
+    else localStorage.removeItem("job_platform_token");
+  }
+};
+
 async function request(path, options = {}, canRefresh = true) {
   const headers = new Headers(options.headers || {});
   if (options.body && !(options.body instanceof FormData)) headers.set("Content-Type", "application/json");
+  if (authToken) headers.set("Authorization", `Bearer ${authToken}`);
+
   let response;
   try {
     response = await fetch(`${API_URL}${path}`, { ...options, headers, credentials: "include" });
@@ -13,10 +25,16 @@ async function request(path, options = {}, canRefresh = true) {
   }
   if (response.status === 401 && canRefresh && path !== "/auth/login" && path !== "/auth/register" && path !== "/auth/refresh") {
     const refreshed = await request("/auth/refresh", { method: "POST" }, false).catch(() => null);
-    if (refreshed?.accessToken) return request(path, options, false);
+    if (refreshed?.accessToken) {
+      setAuthToken(refreshed.accessToken);
+      return request(path, options, false);
+    }
   }
   if (response.status === 204) return null;
   const data = await response.json().catch(() => ({}));
+  if (data?.accessToken) {
+    setAuthToken(data.accessToken);
+  }
   if (!response.ok) {
     const error = new Error(data.error || data.message || `Request failed (${response.status})`);
     error.status = response.status;
@@ -31,9 +49,19 @@ const json = (method, body, headers) => ({ method, body: JSON.stringify(body), h
 
 export const api = {
   me: () => request("/auth/me"),
-  login: (email, password) => request("/auth/login", json("POST", { email, password })),
+  login: async (email, password) => {
+    const res = await request("/auth/login", json("POST", { email, password }));
+    if (res?.accessToken) setAuthToken(res.accessToken);
+    return res;
+  },
   register: (name, email, password) => request("/auth/register", json("POST", { name, email, password })),
-  logout: () => request("/auth/logout", { method: "POST" }),
+  logout: async () => {
+    try {
+      return await request("/auth/logout", { method: "POST" });
+    } finally {
+      setAuthToken(null);
+    }
+  },
   overview: () => request("/monitoring/overview"),
   queue: () => request("/monitoring/queue"),
   stats: () => request("/monitoring/jobs"),

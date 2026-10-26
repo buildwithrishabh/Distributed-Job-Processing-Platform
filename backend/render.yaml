@@ -1,0 +1,65 @@
+services:
+  # 1. API Server (Docker Web Service)
+  - type: web
+    name: job-platform-api
+    runtime: docker
+    rootDir: backend
+    dockerContext: .
+    dockerfilePath: Dockerfile
+    plan: free
+    region: oregon
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: 5000
+      - key: NODE_ENV
+        value: production
+      - key: MONGO_URI
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: CLIENT_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ACCESS_TOKEN_SECRET
+        generateValue: true
+      - key: REFRESH_TOKEN_SECRET
+        generateValue: true
+      - key: WORKER_CONCURRENCY
+        value: 5
+      - key: BREVO_API_KEY
+        sync: false
+      - key: BREVO_SENDER_EMAIL
+        sync: false
+      - key: BREVO_SENDER_NAME
+        value: Distributed Job Platform
+
+  # 2. Worker Service (Runs background worker process with health server)
+  - type: web
+    name: job-platform-worker
+    runtime: docker
+    rootDir: backend
+    dockerContext: .
+    dockerfilePath: Dockerfile
+    dockerCommand: node src/worker.js
+    plan: free
+    region: oregon
+    healthCheckPath: /
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: NODE_ENV
+        value: production
+      - key: MONGO_URI
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: WORKER_CONCURRENCY
+        value: 5
+      - key: BREVO_API_KEY
+        sync: false
+      - key: BREVO_SENDER_EMAIL
+        sync: false
+      - key: BREVO_SENDER_NAME
+        value: Distributed Job Platform

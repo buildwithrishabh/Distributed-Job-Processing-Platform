@@ -16,8 +16,11 @@ COPY src/ ./src
 # Set environment variable
 ENV NODE_ENV=production
 
+# Use non-root node user for container security
+USER node
+
 # Expose API Port
 EXPOSE 5000
 
-# Default command (runs API server; worker overrides CMD in docker-compose.yml)
-CMD ["npm", "start"]
+# Default command (runs API server; worker overrides CMD in Render or docker-compose)
+CMD ["node", "src/server.js"]

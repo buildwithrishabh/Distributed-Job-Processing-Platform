@@ -11,11 +11,26 @@ const errorHandler = require("./middleware/errorHandler");
 
 const app = express();
 
+// Trust reverse proxy (essential for Render, AWS, Cloudflare to get real client IP for rate limiting and cookies)
+app.set("trust proxy", 1);
+
 // Security & Utility Middlewares
 app.use(helmet());
+
+const clientUrls = (process.env.CLIENT_URL || "http://localhost:5173")
+  .split(",")
+  .map((u) => u.trim().replace(/\/$/, ""));
+
 app.use(
   cors({
-    origin: process.env.CLIENT_URL || "http://localhost:5173", // Configure your client origin
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+      const cleanOrigin = origin.replace(/\/$/, "");
+      if (clientUrls.includes(cleanOrigin) || process.env.NODE_ENV !== "production") {
+        return callback(null, true);
+      }
+      return callback(new Error(`CORS blocked for origin: ${origin}`));
+    },
     credentials: true, // Allow HTTP cookies across domains
   })
 );

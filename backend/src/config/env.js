@@ -13,6 +13,8 @@ const envSchema = z.object({
     .min(1)
     .default(process.env.MONGODB_URI || "mongodb://localhost:27017/job_platform"),
 
+  REDIS_URL: z.string().optional().default(""),
+
   REDIS_HOST: z.string().default("localhost"),
 
   REDIS_PORT: z.coerce.number().default(6379),
