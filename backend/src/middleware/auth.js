@@ -6,11 +6,11 @@ const authenticate = async (req, res, next) => {
   try {
     let token;
 
-    // Extract access token from HTTP-only Cookie or Authorization Header fallback
-    if (req.cookies && (req.cookies.accessToken || req.cookies.token)) {
-      token = req.cookies.accessToken || req.cookies.token;
-    } else if (req.headers.authorization && req.headers.authorization.startsWith("Bearer ")) {
+    // Extract access token: prioritize Authorization Header, fallback to HTTP-only Cookie
+    if (req.headers.authorization && req.headers.authorization.startsWith("Bearer ")) {
       token = req.headers.authorization.split(" ")[1];
+    } else if (req.cookies && (req.cookies.accessToken || req.cookies.token)) {
+      token = req.cookies.accessToken || req.cookies.token;
     }
 
     if (!token) {

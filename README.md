@@ -57,30 +57,30 @@ flowchart TD
         Brevo["Brevo Email API / Simulation"]
     end
 
-    UI -->|HTTPS / JSON| API
-    ExternalAPI -->|HTTPS / JSON| API
+    UI -->|"HTTPS / JSON"| API
+    ExternalAPI -->|"HTTPS / JSON"| API
 
     API --> Auth
     API --> RateLimiter
-    API -->|1. Persist Job (PENDING)| Mongo
-    API -->|2. Enqueue Job (BullMQ)| Redis
-    Sweeper -.->|Audit stuck PENDING jobs| Mongo
-    Sweeper -.->|Re-enqueue orphan jobs| Redis
+    API -->|"1. Persist Job (PENDING)"| Mongo
+    API -->|"2. Enqueue Job (BullMQ)"| Redis
+    Sweeper -.->|"Audit stuck PENDING jobs"| Mongo
+    Sweeper -.->|"Re-enqueue orphan jobs"| Redis
 
-    Redis -->|Consume Task| Worker1
-    Redis -->|Consume Task| Worker2
-    Redis -->|Consume Task| WorkerN
+    Redis -->|"Consume Task"| Worker1
+    Redis -->|"Consume Task"| Worker2
+    Redis -->|"Consume Task"| WorkerN
 
-    Worker1 -->|Distributed Lock & Heartbeat| Redis
-    Worker1 -->|Update State (PROCESSING / COMPLETED / RETRYING / DEAD)| Mongo
-    Worker1 -->|Dispatch Transactional Email| Brevo
+    Worker1 -->|"Distributed Lock & Heartbeat"| Redis
+    Worker1 -->|"Update State (PROCESSING / COMPLETED / RETRYING / DEAD)"| Mongo
+    Worker1 -->|"Dispatch Transactional Email"| Brevo
 
-    Worker2 -->|Distributed Lock & Heartbeat| Redis
-    Worker2 -->|Update State| Mongo
-    Worker2 -->|Dispatch Transactional Email| Brevo
+    Worker2 -->|"Distributed Lock & Heartbeat"| Redis
+    Worker2 -->|"Update State"| Mongo
+    Worker2 -->|"Dispatch Transactional Email"| Brevo
 
-    API -->|Non-blocking SCAN for Heartbeats| Redis
-    API -->|Aggregated Job Metrics| Mongo
+    API -->|"Non-blocking SCAN for Heartbeats"| Redis
+    API -->|"Aggregated Job Metrics"| Mongo
 ```
 
 ---

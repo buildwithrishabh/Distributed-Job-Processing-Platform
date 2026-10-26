@@ -114,6 +114,14 @@ function App() {
       .finally(() => setAuthChecking(false));
   }, []);
 
+  useEffect(() => {
+    const handleUnauthorized = () => {
+      setUser(null);
+    };
+    window.addEventListener("auth:unauthorized", handleUnauthorized);
+    return () => window.removeEventListener("auth:unauthorized", handleUnauthorized);
+  }, []);
+
   // Global ESC key listener to close modal drawers
   useEffect(() => {
     const handleKeyDown = (e) => {
