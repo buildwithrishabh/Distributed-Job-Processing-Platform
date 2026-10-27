@@ -40,6 +40,36 @@ app.use(httpLogger);
 app.use(express.json());
 app.use(cookieParser());
 
+// HTTP Request Metrics Middleware
+const {
+  register,
+  httpRequestDuration,
+  httpRequestTotal,
+  updateDynamicGauges,
+} = require("./utils/metrics");
+
+app.use((req, res, next) => {
+  if (req.path === "/metrics") return next();
+
+  const start = process.hrtime();
+  res.on("finish", () => {
+    const [seconds, nanoseconds] = process.hrtime(start);
+    const duration = seconds + nanoseconds / 1e9;
+    const route = req.baseUrl + (req.route?.path || req.path);
+
+    httpRequestDuration.observe(
+      { method: req.method, route, status_code: res.statusCode },
+      duration
+    );
+    httpRequestTotal.inc({
+      method: req.method,
+      route,
+      status_code: res.statusCode,
+    });
+  });
+  next();
+});
+
 // API Routes
 app.use("/api/auth", authRoutes);
 app.use("/api", dlqRoutes);
@@ -49,6 +79,17 @@ app.use("/api", monitoringRoutes);
 // Health check endpoint
 app.get("/health", (req, res) => {
   res.status(200).json({ status: "OK", timestamp: new Date().toISOString() });
+});
+
+// Prometheus Scrape Endpoint
+app.get("/metrics", async (req, res) => {
+  try {
+    await updateDynamicGauges();
+    res.setHeader("Content-Type", register.contentType);
+    res.send(await register.metrics());
+  } catch (error) {
+    res.status(500).send(error.message);
+  }
 });
 
 // 404 Handler
