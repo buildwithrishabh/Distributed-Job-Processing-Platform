@@ -1,11 +1,13 @@
 const { UnrecoverableError } = require("bullmq");
 const env = require("../config/env");
+const logger = require("../utils/logger");
 
 /**
  * Processor for Email Sending Jobs with Brevo API integration and fallback simulation.
  */
 async function emailProcessor(payload, bullJob, signal) {
   const { to, subject, body, html, text } = payload || {};
+  const jobId = bullJob?.data?.jobId || bullJob?.id;
 
   // 1. Permanent Failure Check: Throw UnrecoverableError so BullMQ does NOT retry invalid payloads!
   if (!to || !subject) {
@@ -21,7 +23,7 @@ async function emailProcessor(payload, bullJob, signal) {
     );
   }
 
-  console.log(`[Email Processor] Processing email for: ${to} (Subject: "${subject}")`);
+  logger.info({ jobId, to, subject }, `[Email Processor] Processing email for: ${to}`);
 
   if (bullJob && typeof bullJob.updateProgress === "function") {
     await bullJob.updateProgress(30);
@@ -35,7 +37,7 @@ async function emailProcessor(payload, bullJob, signal) {
   const apiKey = env.BREVO_API_KEY && env.BREVO_API_KEY.trim();
 
   if (apiKey) {
-    console.log(`[Email Processor] Sending live email via Brevo REST API...`);
+    logger.info({ jobId, to }, `[Email Processor] Sending live email via Brevo REST API...`);
     
     if (bullJob && typeof bullJob.updateProgress === "function") {
       await bullJob.updateProgress(60);
@@ -69,11 +71,17 @@ async function emailProcessor(payload, bullJob, signal) {
     });
 
     const responseData = await response.json().catch(() => ({}));
-    console.log(`[Email Processor] Brevo API Response Status: ${response.status}`, responseData);
+    logger.info(
+      { jobId, status: response.status, responseData },
+      `[Email Processor] Brevo API Response Status: ${response.status}`
+    );
 
     if (!response.ok) {
       const errorMsg = responseData.message || responseData.code || response.statusText;
-      console.error(`[Email Processor] Brevo Error (${response.status}):`, errorMsg);
+      logger.error(
+        { jobId, status: response.status, errorMsg },
+        `[Email Processor] Brevo Error (${response.status}): ${errorMsg}`
+      );
 
       // 400 Bad Request from Brevo is a permanent error, no retry needed
       if (response.status === 400) {
@@ -98,7 +106,7 @@ async function emailProcessor(payload, bullJob, signal) {
   }
 
   // Fallback to simulation mode if BREVO_API_KEY is not configured
-  console.log(`[Email Processor] BREVO_API_KEY not configured. Using simulated dispatch...`);
+  logger.info({ jobId }, `[Email Processor] BREVO_API_KEY not configured. Using simulated dispatch...`);
   
   if (bullJob && typeof bullJob.updateProgress === "function") {
     await bullJob.updateProgress(70);

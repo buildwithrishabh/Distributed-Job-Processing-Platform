@@ -1,6 +1,7 @@
 const Job = require("../models/job");
 const { jobQueue, addJobToQueue } = require("../queues/job.queue");
 const { JOB_STATUS } = require("../config/constant");
+const logger = require("../utils/logger");
 
 const SWEEPER_INTERVAL_MS = 2 * 60 * 1000; // every 2 minuteus
 
@@ -19,20 +20,21 @@ async function recoverOrphanJobs() {
         const bullJob = await jobQueue.getJob(job.jobId);
 
         if (!bullJob) {
-          console.warn(
-            `[Sweeper] Found orphan job ${job.jobId}. Re-enqueuing...`,
+          logger.warn(
+            { jobId: job.jobId },
+            `[Sweeper] Found orphan job ${job.jobId}. Re-enqueuing...`
           );
           await addJobToQueue(job);
         }
       } catch (error) {
-        console.error(
-          `[Sweeper] Failed to recover job ${job.jobId}:`,
-          error.message,
+        logger.error(
+          { err: error, jobId: job.jobId },
+          `[Sweeper] Failed to recover job ${job.jobId}: ${error.message}`
         );
       }
     }
   } catch (error) {
-    console.error("[Sweeper] Error in orphan job sweeper run:", error.message);
+    logger.error({ err: error }, `[Sweeper] Error in orphan job sweeper run: ${error.message}`);
   }
 }
 

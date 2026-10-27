@@ -6,6 +6,7 @@ const { JOB_STATUS } = require("../config/constant");
 const { processJobDispatch } = require("../processors");
 const { withTimeout } = require("../utils/timeout");
 const { acquireLock, releaseLock } = require("../utils/lock");
+const logger = require("../utils/logger");
 
 const JOB_TIMEOUT_MS = 15000; // 15 Seconds Max Execution Time
 
@@ -14,16 +15,13 @@ const createJobWorker = (workerId, concurrency = 5) => {
     QUEUE_NAME,
     async (job) => {
       const { jobId, type, payload } = job.data;
-      console.log(
-        `[${workerId}] Starting processing for job: ${jobId} (Type: ${type})`,
-      );
+      const jobLog = logger.child({ workerId, jobId, type });
+
+      jobLog.info("Starting processing for job");
 
       const lockToken = await acquireLock(`worker:job:${jobId}`, 20);
       if (!lockToken) {
-        console.log(
-          `[${workerId}] Job ${jobId} is already being processed by another worker. Skipping.`,
-        );
-
+        jobLog.warn("Job is already being processed by another worker. Skipping.");
         throw new Error(`Could not acquire lock for job: ${jobId}`);
       }
 
@@ -31,22 +29,20 @@ const createJobWorker = (workerId, concurrency = 5) => {
         // Check MongoDb for existing Job state
         const dbJob = await Job.findOne({ jobId });
 
-        // If Job  cancelled or deleted, skip execution immediately
+        // If Job cancelled or deleted, skip execution immediately
         if (!dbJob) {
-          console.log(`[${workerId}] Job ${jobId} not found in DB. Skipping.`);
+          jobLog.info("Job not found in DB. Skipping.");
           return { skipped: true, reason: "Job not found in database" };
         }
 
         // IF Job already completed to skip the job
         if (dbJob.status === JOB_STATUS.COMPLETED) {
-          console.log(`[${workerId}] Job ${jobId} already Completed. Skipping.`);
+          jobLog.info("Job already Completed. Skipping.");
           return { skipped: true, reason: "Job already completed" };
         }
 
         if (dbJob.status === JOB_STATUS.CANCELLED) {
-          console.log(
-            `[${workerId}] Job ${jobId} was CANCELLED by user. Skipping execution.`,
-          );
+          jobLog.info("Job was CANCELLED by user. Skipping execution.");
           return { skipped: true, reason: "Job was cancelled by user" };
         }
 
@@ -65,19 +61,14 @@ const createJobWorker = (workerId, concurrency = 5) => {
         );
 
         if (!processingDb) {
-          console.log(
-            `[${workerId}] Job ${jobId} status changed during lock. Skipping.`,
-          );
+          jobLog.warn("Job status changed during lock. Skipping.");
           return {
             skipped: true,
             reason: "Job status changed before execution",
           };
         }
 
-        console.log(
-          `[${workerId}] Processing job ${jobId} with payload:`,
-          payload,
-        );
+        jobLog.debug({ payload }, "Processing job with payload");
 
         // Execute dispatch to matched job processor strategy with timeout wrapper
         const result = await withTimeout((signal) => 
@@ -96,7 +87,7 @@ const createJobWorker = (workerId, concurrency = 5) => {
           },
         );
 
-        console.log(`[${workerId}] Completed job: ${jobId}`);
+        jobLog.info("Completed job successfully");
         return { success: true, jobId, result };
       } finally {
         // Release the lock
@@ -120,8 +111,17 @@ const createJobWorker = (workerId, concurrency = 5) => {
     const isDead = attemptsMade >= maxAttempts || isUnrecoverable;
     const newStatus = isDead ? JOB_STATUS.DEAD : JOB_STATUS.RETRYING;
 
-    console.error(
-      `[${workerId}] Job ${jobId} failed (Attempt ${attemptsMade}/${maxAttempts}, Unrecoverable: ${isUnrecoverable}). Status: ${newStatus}`,
+    logger.error(
+      {
+        workerId,
+        jobId,
+        attemptsMade,
+        maxAttempts,
+        isUnrecoverable,
+        status: newStatus,
+        err,
+      },
+      `[${workerId}] Job ${jobId} failed (Attempt ${attemptsMade}/${maxAttempts}). Status: ${newStatus}`
     );
 
     await Job.findOneAndUpdate(
@@ -142,7 +142,7 @@ const createJobWorker = (workerId, concurrency = 5) => {
   });
 
   worker.on("error", (err) => {
-    console.error(`[${workerId}] Internal worker error:`, err.message);
+    logger.error({ workerId, err }, `[${workerId}] Internal worker error: ${err.message}`);
   });
   return worker;
 };

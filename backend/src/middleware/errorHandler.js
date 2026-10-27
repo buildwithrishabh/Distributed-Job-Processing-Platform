@@ -1,9 +1,20 @@
 /**
  * Global Error Handling Middleware
  */
+const logger = require("../utils/logger");
+
 const errorHandler = (err, req, res, next) => {
-  // Log error for debugging / server logs
-  console.error(`[Error] ${req.method} ${req.originalUrl}:`, err.stack || err.message || err);
+  const log = req.log || logger;
+
+  log.error(
+    {
+      err,
+      method: req.method,
+      url: req.originalUrl,
+      statusCode: err.statusCode || 500,
+    },
+    `[Error] ${req.method} ${req.originalUrl}: ${err.message}`,
+  );
 
   const statusCode = err.statusCode || err.status || 500;
   const message = err.message || "Internal Server Error";
@@ -13,6 +24,7 @@ const errorHandler = (err, req, res, next) => {
     error: message,
     ...(process.env.NODE_ENV !== "production" && { stack: err.stack }),
   });
+  
 };
 
 module.exports = errorHandler;

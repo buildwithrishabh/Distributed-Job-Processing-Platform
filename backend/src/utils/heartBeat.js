@@ -1,4 +1,5 @@
 const redisClient = require("../config/redis");
+const logger = require("./logger");
 
 const HEARTBEAT_PREFIX = "worker:heartbeat:";
 const INTERVAL_MS = 10000; // Send heartbeat every 10 seconds
@@ -23,9 +24,9 @@ const startWorkerHeartBeat = (workerId) => {
       //   write to redis with ex 30 seconds
       await redisClient.set(redisKey, payload, "EX", TTL_SECONDS);
     } catch (error) {
-      console.error(
-        `[Heartbeat] Failed to send heartbeat for ${workerId}:`,
-        error.message,
+      logger.error(
+        { err: error, workerId },
+        `[Heartbeat] Failed to send heartbeat for ${workerId}: ${error.message}`
       );
     }
   }

@@ -3,6 +3,7 @@ const { addJobToQueue } = require("../queues/job.queue");
 const { JOB_STATUS } = require("../config/constant");
 const { saveIdempotencyKey } = require("../middleware/idempotency");
 const redisClient = require("../config/redis");
+const logger = require("../utils/logger");
 
 const createJobService = async ({
   type,
@@ -39,8 +40,9 @@ const createJobService = async ({
 
     try {
       await addJobToQueue(DbJob);
+      logger.info({ jobId, type, userId }, `[Queue] Job successfully enqueued to BullMQ`);
     } catch (error) {
-      console.error(`[Queue Error] Failed to enqueue job ${jobId}:`, error);
+      logger.error({ err: error, jobId }, `[Queue Error] Failed to enqueue job ${jobId}: ${error.message}`);
 
       // Rollback / Mark as FAILED in MongoDB
       await Job.findByIdAndUpdate(DbJob._id, {
@@ -66,8 +68,9 @@ const createJobService = async ({
   } catch (error) {
     // MongoDB Duplicate Key Error (code 11000)
     if (error.code === 11000 && idempotencyKey) {
-      console.log(
-        `[Idempotency] Race condition caught by DB for key: ${idempotencyKey}`,
+      logger.info(
+        { idempotencyKey, userId },
+        `[Idempotency] Race condition caught by DB for key: ${idempotencyKey}`
       );
 
       const existingJob = await Job.findOne({ userId, idempotencyKey });

@@ -1,8 +1,8 @@
 const express = require("express");
 const cookieParser = require("cookie-parser");
 const cors = require("cors");
-const morgan = require("morgan");
 const helmet = require("helmet");
+const httpLogger = require("./middleware/httpLogger");
 const authRoutes = require("./routes/authRoutes");
 const jobRoutes = require("./routes/jobRoutes");
 const dlqRoutes = require("./routes/dlqRoutes");
@@ -34,7 +34,9 @@ app.use(
     credentials: true, // Allow HTTP cookies across domains
   })
 );
-app.use(morgan("dev"));
+
+
+app.use(httpLogger);
 app.use(express.json());
 app.use(cookieParser());
 

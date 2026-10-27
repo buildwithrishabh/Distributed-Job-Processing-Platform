@@ -1,5 +1,6 @@
 const redisClient = require("../config/redis");
 const Job = require("../models/job");
+const logger = require("../utils/logger");
 
 const IDEMPOTENCY_PREFIX = "idempotency:";
 const DEFAULT_TTL_SECONDS = 86400; // 24 Hours
@@ -7,6 +8,7 @@ const DEFAULT_TTL_SECONDS = 86400; // 24 Hours
 const IDEMPOTENCY_LOCK_TTL = 30;
 
 const idempotencyMiddleware = async (req, res, next) => {
+  const log = req.log || logger;
   const idempotencyKey = req.headers["idempotency-key"];
 
   if (!idempotencyKey) {
@@ -41,8 +43,9 @@ const idempotencyMiddleware = async (req, res, next) => {
 
       // CASE B: Job already created (cachedValue is jobId)
       if (cachedValue) {
-        console.log(
-          `[Idempotency] Duplicate request detected for key: ${idempotencyKey}. Cached JobId: ${cachedValue}`,
+        log.info(
+          { idempotencyKey, cachedJobId: cachedValue },
+          `[Idempotency] Duplicate request detected for key: ${idempotencyKey}`
         );
 
         const existingJob = await Job.findOne({
@@ -71,7 +74,7 @@ const idempotencyMiddleware = async (req, res, next) => {
 
     next();
   } catch (error) {
-    console.error("[Idempotency Middleware Error", error.message);
+    log.error({ err: error, idempotencyKey }, `[Idempotency Middleware Error]: ${error.message}`);
     next(error);
   }
 };

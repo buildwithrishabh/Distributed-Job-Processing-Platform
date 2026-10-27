@@ -4,43 +4,45 @@ const connectDB = require("./config/db");
 const env = require("./config/env");
 const redisClient = require("./config/redis");
 const { startOrphanJobSweeper } = require("./cron/orphanJobSweeper");
+const logger = require("./utils/logger");
 
 const startServer = async () => {
   await connectDB();
 
   // 1. Store app.listen instance in `server` variable
   const server = app.listen(env.PORT, () => {
-    console.log(
+    logger.info(
+      { port: env.PORT, env: env.NODE_ENV },
       `[HTTP Server] Running in ${env.NODE_ENV} mode on port ${env.PORT}`
     );
   });
 
   // Start Orphan Job Sweeper (recovers stuck PENDING jobs)
   const stopSweeper = startOrphanJobSweeper();
-  console.log("[Sweeper] Orphan job sweeper started.");
+  logger.info("[Sweeper] Orphan job sweeper started.");
 
   // 2. Graceful Shutdown Handler
   const shutdown = async (signal) => {
-    console.log(`[HTTP Server] ${signal} received. Closing HTTP server...`);
+    logger.info({ signal }, `[HTTP Server] ${signal} received. Closing HTTP server...`);
 
     if (stopSweeper) {
       stopSweeper();
-      console.log("[Sweeper] Orphan job sweeper stopped.");
+      logger.info("[Sweeper] Orphan job sweeper stopped.");
     }
 
     server.close(async () => {
-      console.log("[HTTP Server] HTTP server closed.");
+      logger.info("[HTTP Server] HTTP server closed.");
 
       try {
         await mongoose.connection.close();
-        console.log("[MongoDB] Database connection closed.");
+        logger.info("[MongoDB] Database connection closed.");
 
         await redisClient.quit();
-        console.log("[Redis] Redis connection closed.");
+        logger.info("[Redis] Redis connection closed.");
 
         process.exit(0);
       } catch (err) {
-        console.error("[Shutdown Error]:", err);
+        logger.error({ err }, "[Shutdown Error] Failed during graceful shutdown");
         process.exit(1);
       }
     });

@@ -1,5 +1,6 @@
 const redisClient = require("../config/redis");
 const env = require("../config/env");
+const logger = require("../utils/logger");
 
 
 function slidingWindowRateLimiter({
@@ -47,7 +48,8 @@ function slidingWindowRateLimiter({
 
       next();
     } catch (error) {
-      console.error("[RateLimiter] Redis error:", error.message);
+      const log = req.log || logger;
+      log.error({ err: error }, `[RateLimiter] Redis error: ${error.message}`);
       // Fail open: don't block user requests if Redis has an issue
       next();
     }

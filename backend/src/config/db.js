@@ -1,6 +1,7 @@
 const dns = require('dns');
 const mongoose = require('mongoose');
 const { MONGO_URI, NODE_ENV } = require('./env');
+const logger = require('../utils/logger');
 
 // In Development use DNS to start mongodb
 if (NODE_ENV !== 'production') {
@@ -14,9 +15,9 @@ const connectDB = async () => {
       serverSelectionTimeoutMS: 5000, // Timeout after 5s instead of hanging
       socketTimeoutMS: 45000, // Close sockets after 45s of inactivity
     });
-    console.log(`[MongoDB] Connected: ${conn.connection.host}`);
+    logger.info({ host: conn.connection.host }, `[MongoDB] Connected to database`);
   } catch (error) {
-    console.error(`[MongoDB] Connection Error: ${error.message}`);
+    logger.fatal({ err: error }, `[MongoDB] Connection Error: ${error.message}`);
     process.exit(1);
   }
 };

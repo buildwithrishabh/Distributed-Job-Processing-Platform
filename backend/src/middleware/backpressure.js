@@ -1,7 +1,9 @@
 const { jobQueue } = require("../queues/job.queue");
 const env = require("../config/env");
+const logger = require("../utils/logger");
 
 const backpressureGuard = async (req, res, next) => {
+  const log = req.log || logger;
   try {
     const maxCapacity = env.MAX_QUEUE_CAPACITY;
 
@@ -9,8 +11,9 @@ const backpressureGuard = async (req, res, next) => {
     const waitingCount = await jobQueue.getWaitingCount();
 
     if (waitingCount > maxCapacity) {
-      console.warn(
-        `[Backpressure] Queue Overload Detected! Waiting Jobs: ${waitingCount}/${maxCapacity}`,
+      log.warn(
+        { waitingCount, maxCapacity },
+        `[Backpressure] Queue Overload Detected! Waiting Jobs: ${waitingCount}/${maxCapacity}`
       );
       res.setHeader("Retry-After", 30); // request producer to wait 30 seconds
 
@@ -25,7 +28,7 @@ const backpressureGuard = async (req, res, next) => {
 
     next();
   } catch (error) {
-    console.error("[Backpressure] Error checking queue size:", error.message);
+    log.error({ err: error }, `[Backpressure] Error checking queue size: ${error.message}`);
     next(); // Fail open if metric check fails
   }
 };

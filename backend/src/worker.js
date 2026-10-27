@@ -3,6 +3,7 @@ const connectDB = require("./config/db");
 const { createJobWorker } = require("./worker/jobWorker");
 const env = require("./config/env");
 const { startWorkerHeartBeat } = require("./utils/heartBeat");
+const logger = require("./utils/logger");
 
 const startWorkerProcess = async () => {
   try {
@@ -15,14 +16,13 @@ const startWorkerProcess = async () => {
       : `worker_${containerHost}`;
     const concurrency = Number(process.env.WORKER_CONCURRENCY) || 5;
 
-    
     const stopHeartBeat = startWorkerHeartBeat(workerId);
 
     const worker = createJobWorker(workerId, concurrency);
-    console.log(
-      `[Worker Process] ${workerId} initialized with concurrency: ${concurrency}`,
+    logger.info(
+      { workerId, concurrency },
+      `[Worker Process] Initialized with concurrency: ${concurrency}`
     );
-
 
     // Health server for render web service port detection 
     const port = process.env.PORT || 10000;
@@ -37,12 +37,13 @@ const startWorkerProcess = async () => {
       }))
     })
     healthServer.listen(port , () => {
-      console.log(`[Health Server] Worker health check server started on port ${port}`) ; 
+      logger.info({ port, workerId }, `[Health Server] Worker health check server started on port ${port}`); 
     })
 
     const shutdown = async (signal) => {
-      console.log(
-        `[Worker Process] ${signal} received. Closing worker gracefully...`,
+      logger.info(
+        { signal, workerId },
+        `[Worker Process] ${signal} received. Closing worker gracefully...`
       );
 
       await stopHeartBeat();
@@ -53,7 +54,7 @@ const startWorkerProcess = async () => {
     process.on("SIGINT", () => shutdown("SIGINT"));
     process.on("SIGTERM", () => shutdown("SIGTERM"));
   } catch (error) {
-    console.error("[Worker Process] Failed to start:", error);
+    logger.fatal({ err: error }, "[Worker Process] Failed to start");
     process.exit(1);
   }
 };
