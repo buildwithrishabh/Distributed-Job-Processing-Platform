@@ -314,7 +314,7 @@ npm --prefix backend run test:watch
 ```text
  Test Files  17 passed (17)
       Tests  100 passed (100)
-   Duration  ~6.7s
+   Duration  ~5s
 ```
 
 ---
@@ -326,17 +326,17 @@ Located under [`backend/tests/unit`](file:///d:/Backend/Backend%20Projects/Distr
 | Directory | Suite File | Tests | Key Scenarios Covered |
 |---|---|---|---|
 | `middleware/` | `auth.test.js` | 6 | Valid JWT in header, valid JWT in cookie, missing token 401, expired token 401, invalid signature 403. |
-| `middleware/` | `rateLimiter.test.js` | 4 | Allows requests below limit, sets `X-RateLimit-*` headers, returns 429 when sliding-window quota is exhausted. |
+| `middleware/` | `rateLimiter.test.js` | 3 | Allows requests below limit, sets `X-RateLimit-*` headers, returns 429 when sliding-window quota is exhausted. |
 | `middleware/` | `idempotency.test.js` | 5 | Skips when header missing, caches response by key, returns cached response on replay, blocks concurrent duplicate calls. |
-| `middleware/` | `backpressure.test.js` | 4 | Allows requests when queue depth < threshold, returns 503 Service Unavailable when queue is overloaded. |
-| `middleware/` | `validateRequest.test.js` | 5 | Zod schema validation on body, query params, path params, returns 400 with structured validation errors. |
-| `services/` | `jobService.test.js` | 8 | Job creation, BullMQ enqueueing, priority mapping, job status transitions (`PENDING` $\rightarrow$ `CANCELLED`), pagination and status filtering. |
+| `middleware/` | `backpressure.test.js` | 3 | Allows requests when queue depth < threshold, returns 503 Service Unavailable when queue is overloaded. |
+| `middleware/` | `validateRequest.test.js` | 6 | Zod schema validation on body, query params, path params, returns 400 with structured validation errors. |
+| `services/` | `jobService.test.js` | 9 | Job creation, BullMQ enqueueing, priority mapping, job status transitions (`PENDING` $\rightarrow$ `CANCELLED`), pagination and status filtering. |
 | `services/` | `dlqService.test.js` | 5 | Fetch dead jobs, replay dead jobs back into BullMQ, reset retry attempts on re-enqueue. |
 | `services/` | `monitoringService.test.js` | 3 | Aggregated metric summaries, queue counts, worker heartbeat parsing. |
-| `processors/` | `email.processor.test.js` | 5 | Brevo API successful dispatch, simulated transient failure retry backoff, permanent validation error $\rightarrow$ unrecoverable error. |
+| `processors/` | `email.processor.test.js` | 8 | Brevo API successful dispatch, simulated transient failure retry backoff, permanent validation error $\rightarrow$ unrecoverable error, simulation mode latency, edge case payloads. |
 | `utils/` | `jwt.test.js` | 4 | Access token generation/verification, refresh token generation/verification, custom claims extraction. |
-| `utils/` | `lock.test.js` | 5 | Atomic Redis `SET NX EX` lock acquisition, lock collision handling, TTL expiry protection, safe lock release by token. |
-| `utils/` | `timeout.test.js` | 3 | Task completion within deadline, timeout rejection, AbortSignal triggering. |
+| `utils/` | `lock.test.js` | 6 | Atomic Redis `SET NX EX` lock acquisition, lock collision handling, TTL expiry protection, safe lock release by token. |
+| `utils/` | `timeout.test.js` | 4 | Task completion within deadline, timeout rejection, AbortSignal triggering, edge timeout boundary. |
 
 ---
 
@@ -347,10 +347,10 @@ Located under [`backend/tests/integration`](file:///d:/Backend/Backend%20Project
 | Suite File | Tests | Endpoints & Flows Tested |
 |---|---|---|
 | `auth.routes.test.js` | 12 | Registration (`POST /api/auth/register`), duplicate email rejection, login (`POST /api/auth/login`), secure cookie issuance, token refresh rotation (`POST /api/auth/refresh`), logout cookie clearing, `/api/auth/me`. |
-| `job.routes.test.js` | 14 | Submission (`POST /api/jobs`), idempotency handling, paginated listing (`GET /api/jobs`), single job query (`GET /api/jobs/:id`), job cancellation (`DELETE /api/jobs/:id`). |
-| `dlq.routes.test.js` | 6 | Retrieve dead jobs (`GET /api/jobs/dead`), replay dead job (`POST /api/jobs/:id/retry`), 404 for non-existent dead jobs. |
-| `monitoring.routes.test.js` | 8 | Authenticated cluster overview (`/api/monitoring/overview`), queue stats (`/api/monitoring/queue`), active workers (`/api/monitoring/workers`). |
-| `health.routes.test.js` | 2 | Unauthenticated liveness probe (`GET /health`), returns 200 with timestamp. |
+| `job.routes.test.js` | 11 | Submission (`POST /api/jobs`), idempotency handling, paginated listing (`GET /api/jobs`), single job query (`GET /api/jobs/:id`), job cancellation (`DELETE /api/jobs/:id`). |
+| `dlq.routes.test.js` | 7 | Retrieve dead jobs (`GET /api/jobs/dead`), replay dead job (`POST /api/jobs/:id/retry`), concurrent lock conflict 400, 404 for non-existent jobs, 400 for invalid job state retry. |
+| `monitoring.routes.test.js` | 5 | Unauthenticated guard 401, queue stats (`/api/monitoring/queue`), job aggregation (`/api/monitoring/jobs`), active workers (`/api/monitoring/workers`), full cluster overview (`/api/monitoring/overview`). |
+| `health.routes.test.js` | 3 | Unauthenticated liveness probe (`GET /health`), 404 for unknown route with standard error format, Helmet security headers verification. |
 
 ---
 
@@ -362,27 +362,37 @@ The entire platform, including monitoring services, can be launched locally with
 
 ```yaml
 services:
-  # Service 1: API Gateway
+  # Service 3: API Gateway
   api:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: job_platform_api
     ports: ["5000:5000"]
     env_file: [.env]
+    environment:
+      - PORT=5000
+      - NODE_ENV=production
     networks: [job-network]
 
-  # Service 2: Background Workers (3 Replicas)
+  # Service 4: Background Workers (Scalable)
   worker:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     command: node src/worker.js
     deploy:
       replicas: 3
     env_file: [.env]
+    environment:
+      - NODE_ENV=production
     networks: [job-network]
 
-  # Service 3: Prometheus Server
+  # Service 5: Prometheus Server
   prometheus:
     image: prom/prometheus:latest
     container_name: job_platform_prometheus
+    restart: unless-stopped
     volumes:
       - ../monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
@@ -390,11 +400,16 @@ services:
     networks: [job-network]
     depends_on: [api]
 
-  # Service 4: Grafana (Auto-Provisioned)
+  # Service 6: Grafana (Auto-Provisioned)
   grafana:
     image: grafana/grafana:latest
     container_name: job_platform_grafana
+    restart: unless-stopped
     ports: ["3001:3000"]
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
     volumes:
       - ../monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
       - ../monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro

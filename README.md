@@ -155,6 +155,7 @@ stateDiagram-v2
 ### 4. Comprehensive Automated Test Suite (100 Tests)
 - **100/100 tests passing** across 17 test files powered by **Vitest** and **Supertest**.
 - Full coverage for middleware (JWT auth, rate limiting, idempotency, backpressure, validation), service layers, processor retry behaviors, and REST integration endpoints.
+- Tests run in fully isolated environments — no live cloud dependencies required.
 
 ### 5. Idempotency & Duplicate Prevention
 - Endpoints accept an optional `Idempotency-Key` HTTP header.
@@ -230,7 +231,7 @@ npm --prefix backend run test:watch
 - **Unit Tests (11 files)**:
   - Middlewares: `auth.test.js`, `rateLimiter.test.js`, `idempotency.test.js`, `backpressure.test.js`, `validateRequest.test.js`
   - Services: `jobService.test.js`, `dlqService.test.js`, `monitoringService.test.js`
-  - Processors: `email.processor.test.js` (Simulated network latency, retries, fatal input routing)
+  - Processors: `email.processor.test.js` (Simulated network latency, retries, fatal input routing, Brevo API dispatch)
   - Utilities: `jwt.test.js`, `lock.test.js` (Distributed lock concurrency & TTLs), `timeout.test.js`
 - **Integration Tests (6 files)**:
   - End-to-end HTTP API tests using Supertest for Authentication, Job Ingestion & Cancellation, Dead Letter Queue Replay, Cluster Monitoring, and Health Probes.
@@ -376,9 +377,11 @@ npm run docker:down
 | Service | Container Name | Port | Description |
 |---|---|---|---|
 | **API Gateway** | `job_platform_api` | `5000` | Express REST API & `/metrics` exporter |
-| **Worker Cluster** | `job_platform_worker_1..3` | `10000` | BullMQ background workers (3 replicas) |
+| **Worker Cluster** | `job_platform_worker_1..3` | `10000` | BullMQ background workers (3 replicas, horizontally scalable) |
 | **Prometheus** | `job_platform_prometheus` | `9090` | Time-series scraper querying `api:5000/metrics` |
 | **Grafana** | `job_platform_grafana` | `3001` | Auto-provisioned dashboards (`admin` / `admin`) |
+
+> **Grafana credentials** are explicitly configured via environment variables (`GF_SECURITY_ADMIN_USER`, `GF_SECURITY_ADMIN_PASSWORD`) with public sign-up disabled (`GF_USERS_ALLOW_SIGN_UP=false`). Both `prometheus` and `grafana` services run with `restart: unless-stopped` for production resilience.
 
 ---
 

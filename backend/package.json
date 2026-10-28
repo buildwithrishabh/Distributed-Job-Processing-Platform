@@ -9,7 +9,12 @@
     "worker": "node src/worker.js",
     "worker:dev": "node --watch src/worker.js",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:load": "k6 run tests/load/job-ingestion.js",
+    "test:load:smoke": "k6 run tests/load/smoke.js",
+    "test:load:jobs": "k6 run tests/load/job-ingestion.js",
+    "test:load:rate-limit": "k6 run tests/load/rate-limiting.js",
+    "test:load:idempotency": "k6 run tests/load/idempotency.js"
   },
   "keywords": [],
   "author": "",

@@ -6,5 +6,7 @@ export default defineConfig({
     environment: "node",
     testTimeout: 10000,
     clearMocks: true,
+    exclude: ["**/tests/load/**", "**/node_modules/**"],
   },
 });
+
