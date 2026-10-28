@@ -1,39 +1,22 @@
 # DevOps, Observability, Logging & Testing Guide
 
-Welcome to the comprehensive DevOps documentation for the **Distributed Job Processing Platform**. This document details the production engineering, observability stack, structured logging, request tracing, automated test suite, and operational runbooks implemented across the platform.
+Engineering reference for the **Distributed Job Processing Platform** — covering the observability stack, structured logging, automated test suites, load testing, containerization, and operational runbooks.
 
 ---
 
 ## 📑 Table of Contents
 
 1. [Architecture Overview](#1-architecture-overview)
-2. [Monitoring & Observability Stack](#2-monitoring--observability-stack)
-   - [Prometheus Exporter & Metrics Catalog](#prometheus-exporter--metrics-catalog)
-   - [Prometheus Configuration](#prometheus-configuration)
-   - [Grafana Auto-Provisioning & Visual Dashboards](#grafana-auto-provisioning--visual-dashboards)
-   - [Native Application Monitoring APIs](#native-application-monitoring-apis)
-3. [Logging & Request Tracing](#3-logging--request-tracing)
-   - [Structured Logging with Pino](#structured-logging-with-pino)
-   - [Environment-Aware Log Formatting](#environment-aware-log-formatting)
-   - [Security & PII Data Redaction](#security--pii-data-redaction)
-   - [Distributed Request Tracing (Correlation IDs)](#distributed-request-tracing-correlation-ids)
-   - [Worker Contextual Logging](#worker-contextual-logging)
-4. [Testing Strategy & Quality Assurance](#4-testing-strategy--quality-assurance)
-   - [Test Philosophy & Framework](#test-philosophy--framework)
-   - [Test Execution & Status (100 Tests)](#test-execution--status-100-tests)
-   - [Unit Testing Suite](#unit-testing-suite)
-   - [Integration Testing Suite](#integration-testing-suite)
-5. [Containerization & Orchestration](#5-containerization--orchestration)
-   - [Docker Compose Multi-Container Topology](#docker-compose-multi-container-topology)
-   - [Horizontal Worker Scaling](#horizontal-worker-scaling)
-   - [Cloud Production Deployment (Vercel + Render + Upstash + Atlas)](#cloud-production-deployment)
-6. [Operational Runbook & Troubleshooting](#6-operational-runbook--troubleshooting)
+2. [Monitoring & Observability](#2-monitoring--observability)
+3. [Structured Logging & Request Tracing](#3-structured-logging--request-tracing)
+4. [Automated Testing — Vitest](#4-automated-testing--vitest)
+5. [Load & Performance Testing — k6](#5-load--performance-testing--k6)
+6. [Containerization & Orchestration](#6-containerization--orchestration)
+7. [Operational Runbook](#7-operational-runbook)
 
 ---
 
 ## 1. Architecture Overview
-
-The platform uses a production-ready telemetry and reliability pipeline to observe system health, catch transient bottlenecks, trace errors end-to-end, and validate every layer through automated tests.
 
 ```mermaid
 flowchart TD
@@ -49,21 +32,21 @@ flowchart TD
         NativeMon["GET /api/monitoring/*"]
     end
 
-    subgraph WorkerCluster ["Distributed Workers (Scalable Replicas)"]
+    subgraph WorkerCluster ["Distributed Workers (Scalable)"]
         Worker1["Worker Node 1 (Pino Child Logger)"]
         Worker2["Worker Node 2 (Pino Child Logger)"]
         WorkerN["Worker Node N (Pino Child Logger)"]
-        Heartbeat["Worker Redis Heartbeats (every 10s)"]
+        Heartbeat["Redis Heartbeats (every 10s)"]
     end
 
-    subgraph ObservabilityStack ["DevOps Telemetry Services"]
-        Prometheus["Prometheus (Port 9090)<br/>Scrapes /metrics every 5s"]
-        Grafana["Grafana (Port 3001)<br/>Auto-provisioned Dashboards"]
+    subgraph ObservabilityStack ["Observability Services"]
+        Prometheus["Prometheus (Port 9090)"]
+        Grafana["Grafana (Port 3001)"]
     end
 
     subgraph Storage ["State & Coordination"]
-        Redis[("Upstash / Local Redis<br/>BullMQ Queue + Locks")]
-        Mongo[("MongoDB Atlas<br/>Durable Job State")]
+        Redis[("Upstash / Local Redis")]
+        Mongo[("MongoDB Atlas")]
     end
 
     Clients -->|"HTTP Requests"| APILayer
@@ -75,74 +58,50 @@ flowchart TD
     WorkerCluster -->|"Atomic Lock / Heartbeat"| Redis
     WorkerCluster -->|"Update Status"| Mongo
 
-    Prometheus -->|"Pull Metrics (every 5s)"| ScrapeEndpoint
+    Prometheus -->|"Pull /metrics every 5s"| ScrapeEndpoint
     Grafana -->|"Query Time-series"| Prometheus
     NativeMon -->|"Read Heartbeats & Counts"| Redis
 ```
 
 ---
 
-## 2. Monitoring & Observability Stack
+## 2. Monitoring & Observability
 
-The platform features a **Pull-Based Metrics Architecture** built on Prometheus and Grafana, alongside high-performance in-app monitoring endpoints for real-time dashboard telemetry.
+### Prometheus Metrics
 
-### Prometheus Exporter & Metrics Catalog
+The backend exposes `GET /metrics` via [`prom-client`](https://github.com/siimon/prom-client) ([`src/utils/metrics.js`](file:///d:/Backend/Backend%20Projects/Distributed%20Job%20Processing%20Platform/backend/src/utils/metrics.js)).
 
-The backend integrates [`prom-client`](https://github.com/siimon/prom-client) in [`backend/src/utils/metrics.js`](file:///d:/Backend/Backend%20Projects/Distributed%20Job%20Processing%20Platform/backend/src/utils/metrics.js), instrumented across the API server and worker layer.
+#### System & Runtime
+Auto-collected with prefix `job_platform_`:
 
-#### 1. System & Runtime Metrics
-- **Prefix**: `job_platform_`
-- **Collector**: `collectDefaultMetrics({ register, prefix: "job_platform_" })`
-- **Exported Telemetry**:
-  - `job_platform_process_cpu_user_seconds_total` & `job_platform_process_cpu_system_seconds_total`
-  - `job_platform_nodejs_heap_size_used_bytes`, `job_platform_nodejs_heap_size_total_bytes`
-  - `job_platform_process_resident_memory_bytes` (RSS)
-  - `job_platform_nodejs_eventloop_lag_seconds`
-  - `job_platform_nodejs_active_handles_total`
+| Metric | Description |
+|---|---|
+| `job_platform_process_cpu_user_seconds_total` | CPU user time |
+| `job_platform_nodejs_heap_size_used_bytes` | Heap used |
+| `job_platform_process_resident_memory_bytes` | RSS memory |
+| `job_platform_nodejs_eventloop_lag_seconds` | Event loop lag |
 
-#### 2. HTTP Request Metrics (RED Method)
-Captured via Express middleware on every incoming HTTP call:
-| Metric Name | Type | Labels | Description |
+#### HTTP (RED Method)
+
+| Metric | Type | Labels | Description |
 |---|---|---|---|
-| `http_request_duration_seconds` | Histogram | `method`, `route`, `status_code` | Latency distribution of API requests. Buckets: `[0.05, 0.1, 0.25, 0.5, 1, 2.5, 5]`s. |
-| `http_request_total` | Counter | `method`, `route`, `status_code` | Cumulative count of incoming API calls. |
+| `http_request_duration_seconds` | Histogram | `method`, `route`, `status_code` | Latency buckets: `[0.05, 0.1, 0.25, 0.5, 1, 2.5, 5]`s |
+| `http_request_total` | Counter | `method`, `route`, `status_code` | Cumulative request count |
 
-#### 3. Queue & Cluster State Metrics
-Dynamic gauges refreshed on every scrape cycle through `updateDynamicGauges()`:
-| Metric Name | Type | Labels | Description |
+#### Queue & Worker State
+
+| Metric | Type | Labels | Description |
 |---|---|---|---|
-| `bullmq_queue_jobs_count` | Gauge | `queue`, `state` | Real-time job counts partitioned by state: `waiting`, `active`, `delayed`, `failed`, `completed`. |
-| `job_platform_active_workers_count` | Gauge | *(none)* | Current number of live worker instances broadcasting heartbeats. |
-| `job_execution_duration_seconds` | Histogram | `job_type`, `status` | Worker execution duration distribution. Buckets: `[0.1, 0.5, 1, 2, 5, 10, 15]`s. |
-| `jobs_processed_total` | Counter | `job_type`, `status` | Total count of processed jobs (`completed`, `failed`, `dead`, `skipped`). |
-
-```javascript
-// Excerpt from backend/src/utils/metrics.js
-const updateDynamicGauges = async () => {
-  const [waiting, active, delayed, failed, completed] = await Promise.all([
-    jobQueue.getWaitingCount(),
-    jobQueue.getActiveCount(),
-    jobQueue.getDelayedCount(),
-    jobQueue.getFailedCount(),
-    jobQueue.getCompletedCount(),
-  ]);
-
-  queueJobCount.set({ queue: jobQueue.name, state: "waiting" }, waiting);
-  queueJobCount.set({ queue: jobQueue.name, state: "active" }, active);
-  queueJobCount.set({ queue: jobQueue.name, state: "delayed" }, delayed);
-  queueJobCount.set({ queue: jobQueue.name, state: "failed" }, failed);
-  queueJobCount.set({ queue: jobQueue.name, state: "completed" }, completed);
-
-  const workers = await getActiveWorker();
-  activeWorkersCount.set(Array.isArray(workers) ? workers.length : 0);
-};
-```
+| `bullmq_queue_jobs_count` | Gauge | `queue`, `state` | Live counts per BullMQ state (`waiting`, `active`, `delayed`, `failed`, `completed`) |
+| `job_platform_active_workers_count` | Gauge | — | Live worker instances broadcasting heartbeats |
+| `job_execution_duration_seconds` | Histogram | `job_type`, `status` | Worker execution duration buckets: `[0.1, 0.5, 1, 2, 5, 10, 15]`s |
+| `jobs_processed_total` | Counter | `job_type`, `status` | Total processed jobs by outcome |
 
 ---
 
 ### Prometheus Configuration
 
-Prometheus is configured in [`monitoring/prometheus/prometheus.yml`](file:///d:/Backend/Backend%20Projects/Distributed%20Job%20Processing%20Platform/monitoring/prometheus/prometheus.yml) with a 5-second scrape interval:
+Config: [`monitoring/prometheus/prometheus.yml`](file:///d:/Backend/Backend%20Projects/Distributed%20Job%20Processing%20Platform/monitoring/prometheus/prometheus.yml)
 
 ```yaml
 global:
@@ -159,93 +118,74 @@ scrape_configs:
           environment: "production"
 ```
 
-- Accessible locally at: `http://localhost:9090`
-- Scrapes the Express API container at `http://api:5000/metrics`
+> Access Prometheus UI at `http://localhost:9090`
 
 ---
 
-### Grafana Auto-Provisioning & Visual Dashboards
+### Grafana Dashboards
 
-Grafana starts with **Zero Manual Setup required**. Both datasources and dashboards are provisioned via code:
+**Zero manual setup.** Datasources and dashboards are fully provisioned via code on startup.
 
-1. **Datasource Provisioning** ([`monitoring/grafana/provisioning/datasources/datasource.yml`](file:///d:/Backend/Backend%20Projects/Distributed%20Job%20Processing%20Platform/monitoring/grafana/provisioning/datasources/datasource.yml)):
-   - Connects to `http://prometheus:9090` as the default Prometheus datasource.
-2. **Dashboard Provider** ([`monitoring/grafana/provisioning/dashboards/dashboards.yml`](file:///d:/Backend/Backend%20Projects/Distributed%20Job%20Processing%20Platform/monitoring/grafana/provisioning/dashboards/dashboards.yml)):
-   - Watches `/var/lib/grafana/dashboards` and reloads automatically every 10 seconds.
-3. **Pre-configured Dashboard** ([`monitoring/grafana/dashboards/job_platform_dashboard.json`](file:///d:/Backend/Backend%20Projects/Distributed%20Job%20Processing%20Platform/monitoring/grafana/dashboards/job_platform_dashboard.json)):
-   - Title: **Distributed Job Processing Platform Dashboard**
-   - Access URL: `http://localhost:3001` (Default credentials: `admin` / `admin`)
+| File | Purpose |
+|---|---|
+| [`provisioning/datasources/datasource.yml`](file:///d:/Backend/Backend%20Projects/Distributed%20Job%20Processing%20Platform/monitoring/grafana/provisioning/datasources/datasource.yml) | Points to `http://prometheus:9090` |
+| [`provisioning/dashboards/dashboards.yml`](file:///d:/Backend/Backend%20Projects/Distributed Job Processing Platform/monitoring/grafana/provisioning/dashboards/dashboards.yml) | Watches `/var/lib/grafana/dashboards`, reloads every 10s |
+| [`dashboards/job_platform_dashboard.json`](file:///d:/Backend/Backend%20Projects/Distributed%20Job%20Processing%20Platform/monitoring/grafana/dashboards/job_platform_dashboard.json) | Pre-built dashboard |
 
-#### Dashboard Layout & Panels:
+Access at `http://localhost:3001` · Credentials: `admin` / `admin`
+
+**Dashboard Panels:**
+
+| Row | Panels |
+|---|---|
+| **Row 1 — Status Overview** | Active Worker Nodes · Waiting Backlog · Active Processing · Failed in Queue |
+| **Row 2 — Queue & Throughput** | Queue State Breakdown (time-series) · Job Throughput Rate (jobs/sec) |
+| **Row 3 — Latency & API Health** | Job Execution Latency P95 vs P50 · HTTP Request Rate by Status Code |
+| **Row 4 — Process Health** | Node.js Memory Footprint (Heap Used / Heap Total / RSS) |
+
+---
+
+### Native Monitoring Endpoints
+
+All endpoints require JWT authentication except `/health`.
+
+| Endpoint | Description |
+|---|---|
+| `GET /api/monitoring/overview` | Full cluster summary — queue, jobs, workers |
+| `GET /api/monitoring/queue` | BullMQ live counts |
+| `GET /api/monitoring/workers` | Active worker heartbeats (Redis SCAN) |
+| `GET /api/monitoring/jobs` | Historical job stats & performance |
+| `GET /health` | Unauthenticated liveness probe → `{ status: "OK", timestamp }` |
+| `GET /metrics` | Prometheus scrape endpoint |
+
+---
+
+## 3. Structured Logging & Request Tracing
+
+The platform uses [**Pino**](https://getpino.io/) ([`src/utils/logger.js`](file:///d:/Backend/Backend%20Projects/Distributed%20Job%20Processing%20Platform/backend/src/utils/logger.js)) — a non-blocking, asynchronous JSON logger with near-zero event loop overhead.
+
+### Log Formats
+
+**Development** — colorized, human-readable via `pino-pretty`:
 ```text
-┌──────────────────────────────────────────────────────────────────────────────────┐
-│ Row 1: System & Queue Status Overview                                            │
-├─────────────────────┬─────────────────────┬───────────────────┬──────────────────┤
-│ Active Worker Nodes │ Waiting Backlog     │ Active Processing │ Failed in Queue  │
-│ [Stat - Threshold]  │ [Stat - Alert Area] │ [Stat - Live]     │ [Stat - Danger]  │
-├─────────────────────┴─────────────────────┴───────────────────┴──────────────────┤
-│ Row 2: BullMQ Queue & Processing Throughput                                      │
-├───────────────────────────────────────────┬──────────────────────────────────────┤
-│ Queue Status Breakdown (Time-series)      │ Throughput Rate (Jobs/sec by status) │
-│ - waiting, active, delayed, failed        │ - sum(rate(jobs_processed_total[1m]))│
-├───────────────────────────────────────────┴──────────────────────────────────────┤
-│ Row 3: Execution Latencies & API Health                                          │
-├───────────────────────────────────────────┬──────────────────────────────────────┤
-│ Job Execution Latencies (P95 vs P50)      │ HTTP Request Rate by Status Code     │
-│ - histogram_quantile(0.95 / 0.50, ...)    │ - sum(rate(http_request_total[1m]))  │
-├───────────────────────────────────────────┴──────────────────────────────────────┤
-│ Row 4: Node.js Process & Memory Health                                           │
-├──────────────────────────────────────────────────────────────────────────────────┤
-│ Process Memory Footprint (Heap Used vs Heap Total vs RSS Memory)                 │
-└──────────────────────────────────────────────────────────────────────────────────┘
+[2026-10-27 23:33:44.236] INFO: POST /api/auth/refresh 200
+    service: "job-processing-platform"
+    req: { "id": "075db101-...", "method": "POST", "url": "/api/auth/refresh" }
+    responseTime: 4
+```
+
+**Production** — single-line JSON for log aggregators (Datadog, Loki, CloudWatch):
+```json
+{"level":30,"time":"2026-10-27T18:03:44.236Z","service":"job-processing-platform","req":{"id":"075db101-...","method":"POST","url":"/api/auth/refresh"},"res":{"statusCode":200},"responseTime":4,"msg":"POST /api/auth/refresh 200"}
 ```
 
 ---
 
-### Native Application Monitoring APIs
+### PII & Secret Redaction
 
-For the built-in React operations dashboard and headless status queries, dedicated authenticated endpoints are available under `/api/monitoring`:
-
-- `GET /api/monitoring/overview`: Aggregated cluster summary including total jobs by status, queue backlog, and active workers.
-- `GET /api/monitoring/queue`: Direct BullMQ counts (`waiting`, `active`, `delayed`, `failed`, `completed`).
-- `GET /api/monitoring/workers`: Live worker heartbeats discovered via non-blocking Redis `SCAN worker:heartbeat:*`.
-- `GET /api/monitoring/jobs`: Historical job statistics and processing performance.
-- `GET /health`: Lightweight unauthenticated liveness probe returning `{ status: "OK", timestamp: "..." }`.
-
----
-
-## 3. Logging & Request Tracing
-
-### Structured Logging with Pino
-
-The platform replaces legacy console logging and heavy logging libraries with [**Pino**](https://getpino.io/) ([`backend/src/utils/logger.js`](file:///d:/Backend/Backend%20Projects/Distributed%20Job%20Processing%20Platform/backend/src/utils/logger.js)), an ultra-fast, non-blocking JSON logger designed for cloud-native applications.
-
-- **Near-Zero Overhead**: Pino logs asynchronously with minimum CPU and memory footprint, preventing event loop blocking during high-volume job spikes.
-- **Base Fields**: Automatically injects `{ service: "job-processing-platform", env: "production" }` and ISO 8601 timestamps.
-
-### Environment-Aware Log Formatting
-
-1. **Development (`NODE_ENV=development`)**:
-   - Uses `pino-pretty` to render human-readable, color-coded terminal output:
-   ```text
-   [2026-10-27 23:33:44.236] INFO: POST /api/auth/refresh 200
-       service: "job-processing-platform"
-       env: "development"
-       req: { "id": "075db101-f447-4ded-b972-29fffd5c2a22", "method": "POST", "url": "/api/auth/refresh" }
-       responseTime: 4
-   ```
-2. **Production (`NODE_ENV=production`)**:
-   - Produces single-line JSON optimized for log forwarders (e.g., Datadog, Grafana Loki, AWS CloudWatch, Logstash):
-   ```json
-   {"level":30,"time":"2026-10-27T18:03:44.236Z","service":"job-processing-platform","env":"production","req":{"id":"075db101-f447-4ded-b972-29fffd5c2a22","method":"POST","url":"/api/auth/refresh"},"res":{"statusCode":200},"responseTime":4,"msg":"POST /api/auth/refresh 200"}
-   ```
-
-### Security & PII Data Redaction
-
-To prevent sensitive credentials and tokens from leaking into logs or monitoring disks, Pino automatically strips confidential fields using strict path rules:
+Pino automatically strips sensitive fields before writing to stdout ([`src/utils/logger.js`](file:///d:/Backend/Backend%20Projects/Distributed%20Job%20Processing%20Platform/backend/src/utils/logger.js)):
 
 ```javascript
-// Excerpt from backend/src/utils/logger.js
 redact: {
   paths: [
     "req.headers.authorization",
@@ -258,59 +198,48 @@ redact: {
 }
 ```
 
-Any log containing `password`, auth headers, or API tokens replaces or strips the value before writing to stdout.
-
 ---
 
-### Distributed Request Tracing (Correlation IDs)
+### Request Tracing (x-request-id)
 
-The Express HTTP pipeline uses `pino-http` ([`backend/src/middleware/httpLogger.js`](file:///d:/Backend/Backend%20Projects/Distributed%20Job%20Processing%20Platform/backend/src/middleware/httpLogger.js)) to provide full trace correlation:
+[`src/middleware/httpLogger.js`](file:///d:/Backend/Backend%20Projects/Distributed%20Job%20Processing%20Platform/backend/src/middleware/httpLogger.js) uses `pino-http` to propagate trace context:
 
-- **Request ID Generation**: Inspects the incoming `x-request-id` header (from API gateways, Cloudflare, or Vercel). If absent, generates an RFC-compliant UUID using `crypto.randomUUID()`.
-- **Level Mapping**:
-  - `HTTP >= 500` or uncaught exceptions $\rightarrow$ Logged as `error`
-  - `HTTP >= 400` (e.g. 401, 403, 404, 429) $\rightarrow$ Logged as `warn`
-  - `HTTP 2xx / 3xx` $\rightarrow$ Logged as `info`
-- **Response Time Logging**: Calculates exact millisecond response times on every request termination.
-
----
+- Reads `x-request-id` from incoming headers (Vercel / Cloudflare / API Gateway); generates a UUID if absent.
+- Log level mapping: `5xx` → `error` · `4xx` → `warn` · `2xx/3xx` → `info`
 
 ### Worker Contextual Logging
 
-Every background job is executed within a scoped child logger containing worker context ([`backend/src/worker/jobWorker.js`](file:///d:/Backend/Backend%20Projects/Distributed%20Job%20Processing%20Platform/backend/src/worker/jobWorker.js)):
+Each job runs inside a scoped child logger ([`src/worker/jobWorker.js`](file:///d:/Backend/Backend%20Projects/Distributed%20Job%20Processing%20Platform/backend/src/worker/jobWorker.js)):
 
 ```javascript
 const jobLog = logger.child({ workerId, jobId, type });
 jobLog.info("Starting processing for job");
 ```
 
-When diagnosing failed jobs or tracking execution flow across horizontally scaled replicas, filtering by `jobId` or `workerId` instantly yields all lifecycle events for that task.
+Filter logs by `jobId` or `workerId` to instantly trace the full lifecycle of any job across scaled replicas.
 
 ---
 
-## 4. Testing Strategy & Quality Assurance
+## 4. Automated Testing — Vitest
 
-### Test Philosophy & Framework
+**Framework**: [Vitest](https://vitest.dev/) + [Supertest](https://github.com/ladjs/supertest)  
+**Config**: [`backend/vitest.config.mjs`](file:///d:/Backend/Backend%20Projects/Distributed%20Job%20Processing%20Platform/backend/vitest.config.mjs)
 
-Testing is built on [**Vitest**](https://vitest.dev/) ([`backend/vitest.config.mjs`](file:///d:/Backend/Backend%20Projects/Distributed%20Job%20Processing%20Platform/backend/vitest.config.mjs)) and [**Supertest**](https://github.com/ladjs/supertest). 
+- Runs in isolated worker threads — one per file, no shared state.
+- `clearMocks: true` — mocks reset automatically between tests.
+- No live cloud dependencies — all Redis/MongoDB calls are mocked.
+- Load tests excluded via `exclude: ["**/tests/load/**"]`.
 
-- **Speed**: Vitest executes tests using native Node.js worker threads with near-instant module resolution.
-- **Isolation**: Each test suite runs in an isolated environment with automatic mock clearing (`clearMocks: true`).
-- **Deterministic**: Tests do not require live cloud dependencies; Redis operations and database interactions use robust mocks and isolated in-memory patterns.
-
-### Test Execution & Status (100 Tests)
-
-The test suite contains **17 test files** and **100 tests**, maintaining a **100% pass rate**:
+### Run Commands
 
 ```bash
-# Run the complete test suite once
+# Run all 100 tests
 npm --prefix backend test
 
-# Run tests in interactive watch mode
+# Watch mode
 npm --prefix backend run test:watch
 ```
 
-**Current Execution Summary**:
 ```text
  Test Files  17 passed (17)
       Tests  100 passed (100)
@@ -319,183 +248,200 @@ npm --prefix backend run test:watch
 
 ---
 
-### Unit Testing Suite
+### Unit Tests — `backend/tests/unit/`
 
-Located under [`backend/tests/unit`](file:///d:/Backend/Backend%20Projects/Distributed%20Job%20Processing%20Platform/backend/tests/unit):
-
-| Directory | Suite File | Tests | Key Scenarios Covered |
+| Layer | File | Tests | Coverage |
 |---|---|---|---|
-| `middleware/` | `auth.test.js` | 6 | Valid JWT in header, valid JWT in cookie, missing token 401, expired token 401, invalid signature 403. |
-| `middleware/` | `rateLimiter.test.js` | 3 | Allows requests below limit, sets `X-RateLimit-*` headers, returns 429 when sliding-window quota is exhausted. |
-| `middleware/` | `idempotency.test.js` | 5 | Skips when header missing, caches response by key, returns cached response on replay, blocks concurrent duplicate calls. |
-| `middleware/` | `backpressure.test.js` | 3 | Allows requests when queue depth < threshold, returns 503 Service Unavailable when queue is overloaded. |
-| `middleware/` | `validateRequest.test.js` | 6 | Zod schema validation on body, query params, path params, returns 400 with structured validation errors. |
-| `services/` | `jobService.test.js` | 9 | Job creation, BullMQ enqueueing, priority mapping, job status transitions (`PENDING` $\rightarrow$ `CANCELLED`), pagination and status filtering. |
-| `services/` | `dlqService.test.js` | 5 | Fetch dead jobs, replay dead jobs back into BullMQ, reset retry attempts on re-enqueue. |
-| `services/` | `monitoringService.test.js` | 3 | Aggregated metric summaries, queue counts, worker heartbeat parsing. |
-| `processors/` | `email.processor.test.js` | 8 | Brevo API successful dispatch, simulated transient failure retry backoff, permanent validation error $\rightarrow$ unrecoverable error, simulation mode latency, edge case payloads. |
-| `utils/` | `jwt.test.js` | 4 | Access token generation/verification, refresh token generation/verification, custom claims extraction. |
-| `utils/` | `lock.test.js` | 6 | Atomic Redis `SET NX EX` lock acquisition, lock collision handling, TTL expiry protection, safe lock release by token. |
-| `utils/` | `timeout.test.js` | 4 | Task completion within deadline, timeout rejection, AbortSignal triggering, edge timeout boundary. |
+| `middleware/` | `auth.test.js` | 6 | JWT in header/cookie, missing token 401, expired 401, invalid signature 403 |
+| `middleware/` | `rateLimiter.test.js` | 3 | Below-limit pass, `X-RateLimit-*` headers, 429 on quota exhaustion |
+| `middleware/` | `idempotency.test.js` | 5 | Header absent skip, cache-on-first, replay returns cached, concurrent duplicate block |
+| `middleware/` | `backpressure.test.js` | 3 | Pass when below threshold, 503 when queue overloaded |
+| `middleware/` | `validateRequest.test.js` | 6 | Zod validation on body/query/params, 400 with structured errors |
+| `services/` | `jobService.test.js` | 9 | Create, enqueue, priority mapping, `PENDING→CANCELLED`, pagination, status filter |
+| `services/` | `dlqService.test.js` | 5 | Fetch dead jobs, replay to BullMQ, reset attempt counter |
+| `services/` | `monitoringService.test.js` | 3 | Metric aggregation, queue counts, heartbeat parsing |
+| `processors/` | `email.processor.test.js` | 8 | Brevo dispatch, transient retry backoff, fatal validation → DEAD, simulation mode |
+| `utils/` | `jwt.test.js` | 4 | Access/refresh token generation & verification, custom claims |
+| `utils/` | `lock.test.js` | 6 | `SET NX EX` acquire, collision handling, TTL expiry, safe release by token |
+| `utils/` | `timeout.test.js` | 4 | Completes within deadline, timeout rejection, AbortSignal, boundary edge case |
 
 ---
 
-### Integration Testing Suite
+### Integration Tests — `backend/tests/integration/`
 
-Located under [`backend/tests/integration`](file:///d:/Backend/Backend%20Projects/Distributed%20Job%20Processing%20Platform/backend/tests/integration) using Supertest against the Express app:
+Full HTTP round-trip tests via Supertest against the Express app.
 
-| Suite File | Tests | Endpoints & Flows Tested |
+| File | Tests | Routes & Flows |
 |---|---|---|
-| `auth.routes.test.js` | 12 | Registration (`POST /api/auth/register`), duplicate email rejection, login (`POST /api/auth/login`), secure cookie issuance, token refresh rotation (`POST /api/auth/refresh`), logout cookie clearing, `/api/auth/me`. |
-| `job.routes.test.js` | 11 | Submission (`POST /api/jobs`), idempotency handling, paginated listing (`GET /api/jobs`), single job query (`GET /api/jobs/:id`), job cancellation (`DELETE /api/jobs/:id`). |
-| `dlq.routes.test.js` | 7 | Retrieve dead jobs (`GET /api/jobs/dead`), replay dead job (`POST /api/jobs/:id/retry`), concurrent lock conflict 400, 404 for non-existent jobs, 400 for invalid job state retry. |
-| `monitoring.routes.test.js` | 5 | Unauthenticated guard 401, queue stats (`/api/monitoring/queue`), job aggregation (`/api/monitoring/jobs`), active workers (`/api/monitoring/workers`), full cluster overview (`/api/monitoring/overview`). |
-| `health.routes.test.js` | 3 | Unauthenticated liveness probe (`GET /health`), 404 for unknown route with standard error format, Helmet security headers verification. |
+| `auth.routes.test.js` | 12 | Register, duplicate rejection, login + cookie issuance, token refresh rotation, logout, `/api/auth/me` |
+| `job.routes.test.js` | 11 | Submit job 202, schema validation 400, idempotency replay, paginated list, get by ID, cancel PENDING, cancel non-PENDING 400, 404s |
+| `dlq.routes.test.js` | 7 | List dead jobs, successful retry + re-enqueue, concurrent lock conflict 400, not-found 404, wrong-state retry 400 |
+| `monitoring.routes.test.js` | 5 | Auth guard 401, queue stats, job aggregation, worker heartbeats, full overview |
+| `health.routes.test.js` | 3 | `GET /health` 200, unknown route 404, Helmet security headers |
 
 ---
 
-## 5. Containerization & Orchestration
+## 5. Load & Performance Testing — k6
 
-### Docker Compose Multi-Container Topology
+Performance and stress tests using [**k6**](https://k6.io/), located in [`backend/tests/load/`](file:///d:/Backend/Backend%20Projects/Distributed%20Job%20Processing%20Platform/backend/tests/load).
 
-The entire platform, including monitoring services, can be launched locally with a single command via [`backend/docker-compose.yml`](file:///d:/Backend/Backend%20Projects/Distributed%20Job%20Processing%20Platform/backend/docker-compose.yml):
+> [!NOTE]
+> k6 tests are excluded from the Vitest runner. They require a running backend server and the `k6` binary installed separately.
 
-```yaml
-services:
-  # Service 3: API Gateway
-  api:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: job_platform_api
-    ports: ["5000:5000"]
-    env_file: [.env]
-    environment:
-      - PORT=5000
-      - NODE_ENV=production
-    networks: [job-network]
+### Test Scenarios
 
-  # Service 4: Background Workers (Scalable)
-  worker:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    command: node src/worker.js
-    deploy:
-      replicas: 3
-    env_file: [.env]
-    environment:
-      - NODE_ENV=production
-    networks: [job-network]
+| Script | Target | VUs / Pattern | Key Assertion |
+|---|---|---|---|
+| [`smoke.js`](file:///d:/Backend/Backend%20Projects/Distributed%20Job%20Processing%20Platform/backend/tests/load/smoke.js) | `/health`, `/metrics`, `GET /api/jobs` | 3 VUs, low load | `p(95) < 150ms`, `0%` errors |
+| [`job-ingestion.js`](file:///d:/Backend/Backend%20Projects/Distributed%20Job%20Processing%20Platform/backend/tests/load/job-ingestion.js) | `POST /api/jobs` | Ramp to 50 VUs | Enqueue throughput (jobs/sec), `p(95) < 400ms` |
+| [`rate-limiting.js`](file:///d:/Backend/Backend%20Projects/Distributed%20Job%20Processing%20Platform/backend/tests/load/rate-limiting.js) | `POST /api/jobs` | Rapid burst | `429 Too Many Requests` + `Retry-After` header triggered |
+| [`idempotency.js`](file:///d:/Backend/Backend%20Projects/Distributed%20Job%20Processing%20Platform/backend/tests/load/idempotency.js) | `POST /api/jobs` | 10 VUs, same key | `202` for first, `200` (duplicate) for replays |
 
-  # Service 5: Prometheus Server
-  prometheus:
-    image: prom/prometheus:latest
-    container_name: job_platform_prometheus
-    restart: unless-stopped
-    volumes:
-      - ../monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - prometheus_data:/prometheus
-    ports: ["9090:9090"]
-    networks: [job-network]
-    depends_on: [api]
+Helper: [`tests/load/helpers/auth.js`](file:///d:/Backend/Backend%20Projects/Distributed%20Job%20Processing%20Platform/backend/tests/load/helpers/auth.js) — shared login & token utilities for k6 scripts.
 
-  # Service 6: Grafana (Auto-Provisioned)
-  grafana:
-    image: grafana/grafana:latest
-    container_name: job_platform_grafana
-    restart: unless-stopped
-    ports: ["3001:3000"]
-    environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin
-      - GF_USERS_ALLOW_SIGN_UP=false
-    volumes:
-      - ../monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
-      - ../monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
-      - grafana_data:/var/lib/grafana
-    networks: [job-network]
-    depends_on: [prometheus]
-```
+---
 
-#### Launching the Stack:
+### Prerequisites
+
 ```bash
-# Start all containers in detached mode
-npm run docker:up
+# 1. Start the backend API (port 5000)
+npm run dev:backend
 
-# View real-time cluster logs
-docker compose -f backend/docker-compose.yml logs -f
-
-# Teardown the stack and keep volumes
-npm run docker:down
+# 2. Verify k6 is installed
+k6 version
 ```
+
+### Run Commands
+
+```bash
+# From repo root
+npm run test:load:smoke          # Baseline smoke test
+npm run test:load:jobs           # High-throughput ingestion benchmark
+npm run test:load:rate-limit     # Rate limiter burst verification
+npm run test:load:idempotency    # Race-condition duplicate prevention
+
+# Or with custom parameters
+k6 run --vus 20 --duration 30s backend/tests/load/job-ingestion.js
+
+# Target staging / production
+k6 run -e BASE_URL=https://your-backend.onrender.com backend/tests/load/smoke.js
+```
+
+### Live Observability During Load Tests
+
+While `job-ingestion.js` runs, monitor in real-time:
+
+| What | Where |
+|---|---|
+| Raw Prometheus metrics | `http://localhost:5000/metrics` |
+| Grafana queue depth & latency | `http://localhost:3001` |
+| Worker telemetry & job counters | `http://localhost:5173` (React dashboard) |
+
+---
+
+## 6. Containerization & Orchestration
+
+### Docker Compose Stack
+
+Full stack (API + Workers + Prometheus + Grafana) via [`backend/docker-compose.yml`](file:///d:/Backend/Backend%20Projects/Distributed%20Job%20Processing%20Platform/backend/docker-compose.yml):
+
+```bash
+npm run docker:up                                                    # Build & start all services
+docker compose -f backend/docker-compose.yml logs -f                 # Stream live logs
+docker compose -f backend/docker-compose.yml up -d --scale worker=5 # Scale workers
+npm run docker:down                                                  # Teardown
+```
+
+**Services:**
+
+| Container | Port | Description |
+|---|---|---|
+| `job_platform_api` | `5000` | Express API Gateway + `/metrics` |
+| `job_platform_worker_1..3` | `10000` | BullMQ Workers (3 replicas by default) |
+| `job_platform_prometheus` | `9090` | Prometheus — scrapes `/metrics` every 5s · `restart: unless-stopped` |
+| `job_platform_grafana` | `3001` | Grafana — auto-provisioned · `restart: unless-stopped` |
+
+> Grafana admin credentials are set via env vars (`GF_SECURITY_ADMIN_USER`, `GF_SECURITY_ADMIN_PASSWORD`). Public sign-up is disabled (`GF_USERS_ALLOW_SIGN_UP=false`).
 
 ---
 
 ### Horizontal Worker Scaling
 
-Workers are completely stateless. To handle heavy batch workloads, scale worker replicas dynamically without downtime:
+Workers are fully stateless — scale without downtime:
 
 ```bash
-# Scale worker pool from 3 to 10 instances
+# Scale to 10 worker replicas
 docker compose -f backend/docker-compose.yml up -d --scale worker=10
 ```
 
-Each worker automatically registers a distinct heartbeat key in Redis (`worker:heartbeat:worker_<hostname>`), visible in Grafana and the React dashboard within 10 seconds.
+Each new worker registers a unique heartbeat key in Redis (`worker:heartbeat:worker_<hostname>`), visible in Grafana and the React dashboard within 10 seconds.
 
 ---
 
 ### Cloud Production Deployment
 
-| Layer | Platform | Runtime Details & Architecture Strategy |
+| Layer | Platform | Notes |
 |---|---|---|
-| **Frontend** | **Vercel** | Single Page Application (SPA), CDN-cached, redirects to backend URL via `VITE_API_URL`. |
-| **API Gateway** | **Render (Web Service)** | Docker container. Port 5000. Auto-deploys from `backend/Dockerfile`. |
-| **Worker Cluster** | **Render (Web Service)** | Docker container. Port 10000. **Cost Optimization**: Render background workers require paid plans ($7/mo); we host workers on Render's free Web Service tier with an embedded lightweight HTTP health check endpoint on port 10000. |
-| **Message Broker** | **Upstash Redis** | Serverless Redis with native TLS encryption. Handles BullMQ job queues, atomic distributed locks, and worker heartbeats. |
-| **Durable Database** | **MongoDB Atlas** | M0 cluster. Durable source of truth for user accounts, job states, retry history, and dead letter records. |
+| **Frontend** | Vercel | SPA, CDN-cached. Set `VITE_API_URL` to backend URL. |
+| **API Gateway** | Render (Web Service) | Docker, port 5000. Auto-deploys from `backend/Dockerfile`. |
+| **Worker Cluster** | Render (Web Service) | Docker, port 10000. CMD override: `node src/worker.js`. Uses free tier via embedded `/` health endpoint. |
+| **Message Broker** | Upstash Redis | Serverless TLS Redis. Set `REDIS_URL=rediss://...`. |
+| **Database** | MongoDB Atlas | M0 free cluster. Set `MONGO_URI`. Whitelist `0.0.0.0/0`. |
+
+> **Why port 10000 for workers?** Render's Background Worker service type costs \$7/mo. The worker embeds a lightweight HTTP health endpoint on port `10000` so it can run on Render's **free Web Service tier**. Use [cron-job.org](https://cron-job.org) to ping it every 10 minutes to prevent sleep.
 
 ---
 
-## 6. Operational Runbook & Troubleshooting
+## 7. Operational Runbook
 
-### Scenario 1: High Queue Backlog Detected
-1. **Symptom**: Grafana panel *"Waiting Backlog (Queue)"* turns amber or red (>50 jobs).
-2. **Diagnosis**:
-   - Check *"Active Worker Nodes"*. If count is 0 or low, workers may be down or disconnected from Redis.
-   - Check *"Job Execution Duration (P95)"*. If duration spiked to >15s, tasks may be hitting timeouts.
-3. **Remediation**:
-   - Scale worker replicas: `docker compose -f backend/docker-compose.yml up -d --scale worker=6`.
-   - Check worker logs for unhandled external API rate limits (e.g., Brevo email API).
+### 🔴 High Queue Backlog
 
-### Scenario 2: Jobs Accumulating in Dead Letter Queue (`DEAD`)
-1. **Symptom**: `Failed Jobs in Queue` increases or jobs appear in `/api/jobs/dead`.
-2. **Diagnosis**:
-   - Filter logs by `status: "DEAD"` in terminal or log viewer.
-   - Inspect `db.jobs.find({ status: "DEAD" })` to read the exact error message and stack trace.
-3. **Remediation**:
-   - If caused by bad client input (e.g. invalid email format), no replay is needed.
-   - If caused by downstream service outage that has recovered, trigger 1-Click Replay via the Dashboard or API:
+**Symptom:** Grafana *"Waiting Backlog"* panel turns amber/red (> 50 jobs).
+
+1. Check *"Active Worker Nodes"* — if 0 or low, workers are down or disconnected from Redis.
+2. Check *"Job Execution Duration P95"* — if > 15s, workers may be timing out on external calls.
+3. **Fix:** Scale workers up:
+   ```bash
+   docker compose -f backend/docker-compose.yml up -d --scale worker=6
+   ```
+4. Check worker logs for Brevo API rate limits or network errors.
+
+---
+
+### 🔴 Jobs Accumulating in DLQ (`DEAD`)
+
+**Symptom:** `Failed Jobs in Queue` metric rises; jobs visible at `GET /api/jobs/dead`.
+
+1. Filter structured logs: `status: "DEAD"` or `jobId: "<target>"`
+2. Query MongoDB: `db.jobs.find({ status: "DEAD" })` → read `error.message` + stack trace.
+3. **Fix:**
+   - Bad client input (e.g. invalid email) → no action needed.
+   - Downstream outage recovered → replay via dashboard or:
      ```http
      POST /api/jobs/:id/retry
      ```
 
-### Scenario 3: Investigating a Specific Job Failure
-1. Find the `jobId` from the dashboard or error alert.
-2. In production logs, search for structured JSON entries matching:
-   ```json
-   {"jobId":"<target_job_id>"}
-   ```
-3. The child logger reveals:
-   - Worker node that picked up the task (`workerId`).
-   - Lock acquisition status.
-   - Execution payload.
-   - Attempt count and exact exception stack trace.
+---
 
-### Scenario 4: Verifying Scrape Target Health
-1. Open Prometheus target dashboard: `http://localhost:9090/targets`.
-2. Verify that `job-platform-api` displays **State: UP**.
-3. If State is DOWN, ensure the API container is running and reachable on `job-network:5000`. Test manually with:
+### 🔴 Investigating a Specific Job Failure
+
+1. Get the `jobId` from the dashboard or alert.
+2. Search structured logs:
+   ```json
+   { "jobId": "<target_job_id>" }
+   ```
+3. Child logger entries reveal: `workerId`, lock acquisition result, payload, attempt count, and exception stack.
+
+---
+
+### 🔴 Prometheus Scrape Target Down
+
+**Symptom:** Grafana panels show "No data"; Prometheus target shows State: DOWN.
+
+1. Open `http://localhost:9090/targets` → check `job-platform-api`.
+2. If DOWN, verify the API container is up:
    ```bash
    curl http://localhost:5000/metrics
+   docker compose -f backend/docker-compose.yml ps
    ```
+3. Ensure `api` container is on `job-network` and Prometheus config target matches (`api:5000`).
