@@ -297,14 +297,14 @@ Tests ensure that when you change code or refactor a service, you don't accident
 ### Quick Commands
 
 ```bash
-# Run all 100 tests once
+# Run all 137 tests once
 npm --prefix backend test
 
 # Run tests in watch mode (re-runs automatically on file save)
 npm --prefix backend run test:watch
 ```
 
-### Complete Test Breakdown (100 Tests)
+### Complete Test Breakdown (137 Tests)
 
 ```text
  ✓ tests/unit/middleware/auth.test.js (6 tests)
@@ -312,21 +312,27 @@ npm --prefix backend run test:watch
  ✓ tests/unit/middleware/idempotency.test.js (5 tests)
  ✓ tests/unit/middleware/backpressure.test.js (3 tests)
  ✓ tests/unit/middleware/validateRequest.test.js (6 tests)
+ ✓ tests/unit/socket/auth.middleware.test.js (5 tests)
+ ✓ tests/unit/socket/jobHandler.test.js (8 tests)
+ ✓ tests/unit/socket/queueEvents.test.js (9 tests)
+ ✓ tests/unit/socket/socketIndex.test.js (5 tests)
  ✓ tests/unit/services/jobService.test.js (9 tests)
  ✓ tests/unit/services/dlqService.test.js (5 tests)
  ✓ tests/unit/services/monitoringService.test.js (3 tests)
  ✓ tests/unit/processors/email.processor.test.js (8 tests)
  ✓ tests/unit/utils/jwt.test.js (4 tests)
  ✓ tests/unit/utils/lock.test.js (6 tests)
+ ✓ tests/unit/utils/metrics.test.js (3 tests)
  ✓ tests/unit/utils/timeout.test.js (4 tests)
  ✓ tests/integration/auth.routes.test.js (12 tests)
  ✓ tests/integration/job.routes.test.js (11 tests)
  ✓ tests/integration/dlq.routes.test.js (7 tests)
  ✓ tests/integration/monitoring.routes.test.js (5 tests)
- ✓ tests/integration/health.routes.test.js (3 tests)
+ ✓ tests/integration/health.routes.test.js (4 tests)
+ ✓ tests/integration/socket.events.test.js (6 tests)
 
- Test Files  17 passed (17)
-      Tests  100 passed (100)
+ Test Files  23 passed (23)
+      Tests  137 passed (137)
 ```
 
 #### Unit Tests (`backend/tests/unit/`)
@@ -339,6 +345,10 @@ Tests individual functions and middleware in complete isolation:
 | **Idempotency** | `idempotency.test.js` | Tests caching of duplicate requests using the `Idempotency-Key` header so actions don't run twice. |
 | **Backpressure** | `backpressure.test.js` | Verifies that when the Redis queue exceeds capacity, the API returns `503 Service Unavailable`. |
 | **Validation** | `validateRequest.test.js` | Tests Zod schema validation on request body/params; ensures `400 Bad Request` with helpful error messages. |
+| **Socket Auth** | `auth.middleware.test.js` | Validates cookie-based JWT handshake authentication on incoming Socket.IO connections. |
+| **Socket Handlers** | `jobHandler.test.js` | Validates job room subscriptions (`job:subscribe`/`job:unsubscribe`), ObjectId checks, and authorization. |
+| **Queue Listeners** | `queueEvents.test.js` | Tests BullMQ `QueueEvents` forwarding (`active`, `progress`, `completed`, `failed`) to private user and job rooms. |
+| **Socket Server** | `socketIndex.test.js` | Tests Socket.IO initialization with Redis adapter pub/sub clients, user room auto-joining, and graceful shutdown. |
 | **Job Service** | `jobService.test.js` | Tests job creation, priority mapping, cancellation, pagination, and status filters. |
 | **DLQ Service** | `dlqService.test.js` | Tests fetching dead jobs, re-enqueuing them back into BullMQ, and resetting attempt counters. |
 | **Monitoring** | `monitoringService.test.js` | Tests metric aggregation, queue counting, and worker heartbeat parsing. |
@@ -346,9 +356,10 @@ Tests individual functions and middleware in complete isolation:
 | **Distributed Lock** | `lock.test.js` | Tests Redis atomic locks (`SET NX EX`), race-condition handling, TTL expiry, and safe token releases. |
 | **Timeout Guard** | `timeout.test.js` | Tests worker task execution deadlines and graceful abort handling using `AbortSignal`. |
 | **JWT Utilities** | `jwt.test.js` | Tests access/refresh token generation, cryptographic signing, and expiration decoding. |
+| **Observability** | `metrics.test.js` | Tests Prometheus registry, metric collectors, and dynamic queue & worker gauge recalculation. |
 
 #### Integration Tests (`backend/tests/integration/`)
-Spins up the Express application and sends real simulated HTTP requests:
+Spins up the Express application and sends real simulated HTTP and WebSocket requests:
 
 | File | What It Tests |
 |---|---|
@@ -356,7 +367,8 @@ Spins up the Express application and sends real simulated HTTP requests:
 | `job.routes.test.js` | Full job cycle: `POST /api/jobs` returns 202, schema validation returns 400, fetching by ID, pagination, and cancelling pending jobs. |
 | `dlq.routes.test.js` | Querying dead jobs, retrying a dead job via `POST /api/jobs/:id/retry`, and preventing retry of active jobs. |
 | `monitoring.routes.test.js` | Security check ensuring monitoring endpoints require authentication, returning queue & worker stats. |
-| `health.routes.test.js` | Unauthenticated `GET /health` returns 200 OK, Helmet security headers are present, and 404s on non-existent routes. |
+| `health.routes.test.js` | Unauthenticated `GET /health` returns 200 OK, Helmet security headers, 404s on non-existent routes, and `GET /metrics` Prometheus scrape endpoint. |
+| `socket.events.test.js` | Real-time Socket.IO handshake auth rejection/acceptance, user room dispatch, job room subscriptions, and live progress event delivery. |
 
 ---
 
@@ -367,30 +379,33 @@ Load testing means bombarding your server with simulated traffic to see:
 - *Can our API handle 100 requests per second without crashing?*
 - *Does our rate limiter actually stop spammers?*
 - *Do duplicate requests get safely handled by idempotency keys?*
+- *Can our Socket.IO server handle concurrent real-time client connections?*
 
 We use [**k6**](https://k6.io/), an open-source performance testing tool. All test scripts are in [`backend/tests/load/`](file:///d:/Backend/Backend%20Projects/Distributed%20Job%20Processing%20Platform/backend/tests/load).
 
 > [!NOTE]
 > k6 runs against a **live running backend server**. Make sure your backend API is started (`npm run dev:backend`) before running these tests.
 
-### The 4 Load Test Scenarios
+### The 5 Load Test Scenarios
 
 ```mermaid
 flowchart TD
     subgraph Scenarios ["k6 Test Suites"]
-        S1["1. Smoke Test (smoke.js)\n3 VUs - Sanity check that routes work under light load"]
+        S1["1. Smoke Test (smoke.js)\n3 VUs - Sanity check of /health, /metrics, /api/jobs, and Socket handshake"]
         S2["2. Job Ingestion (job-ingestion.js)\nRamps up to 50 VUs - Tests how many jobs/sec the API can accept"]
         S3["3. Rate Limiter (rate-limiting.js)\nRapid burst - Proves the API returns 429 when spammed"]
         S4["4. Idempotency (idempotency.js)\n10 VUs send same key - Proves only 1 job is created"]
+        S5["5. Real-Time Socket (socket-connection.js)\n15 concurrent VUs - Validates WebSocket handshake and room events"]
     end
 ```
 
 | Script | Purpose | Virtual Users (VUs) | Success Criteria |
 |---|---|---|---|
-| [`smoke.js`](file:///d:/Backend/Backend%20Projects/Distributed%20Job%20Processing%20Platform/backend/tests/load/smoke.js) | Basic sanity check of `/health`, `/metrics`, and `/api/jobs` | 3 VUs | 95% of requests respond in under 150ms; 0% errors. |
+| [`smoke.js`](file:///d:/Backend/Backend%20Projects/Distributed%20Job%20Processing%20Platform/backend/tests/load/smoke.js) | Basic sanity check of `/health`, `/metrics`, `/api/jobs`, and Socket.IO handshake | 3 VUs | 95% of requests respond in under 150ms; 0% errors. |
 | [`job-ingestion.js`](file:///d:/Backend/Backend%20Projects/Distributed%20Job%20Processing%20Platform/backend/tests/load/job-ingestion.js) | Stress test for job submission throughput | Ramps up to 50 VUs | Measures jobs accepted per second; 95% respond in under 400ms. |
 | [`rate-limiting.js`](file:///d:/Backend/Backend%20Projects/Distributed%20Job%20Processing%20Platform/backend/tests/load/rate-limiting.js) | Burst test to verify DDoS protection | High frequency burst | Successfully triggers `429 Too Many Requests` + `Retry-After` header. |
 | [`idempotency.js`](file:///d:/Backend/Backend%20Projects/Distributed%20Job%20Processing%20Platform/backend/tests/load/idempotency.js) | Race condition test | 10 concurrent VUs with same key | 1st request returns `202 Accepted`; remaining 9 return `200 Cached Result`. |
+| [`socket-connection.js`](file:///d:/Backend/Backend%20Projects/Distributed%20Job%20Processing%20Platform/backend/tests/load/socket-connection.js) | WebSocket concurrent connection and subscription benchmark | Up to 15 concurrent VUs | 95% connection handshakes < 500ms; validates EIO4 WebSocket negotiation. |
 
 ### How to Run Load Tests
 
@@ -399,10 +414,11 @@ flowchart TD
 npm run dev:backend
 
 # 2. In another terminal, run any of the k6 tests:
-npm run test:load:smoke          # Baseline smoke test
+npm run test:load:smoke          # Baseline smoke test (HTTP & Socket.IO handshake)
 npm run test:load:jobs           # High-throughput ingestion benchmark
 npm run test:load:rate-limit     # Rate limiter burst test
 npm run test:load:idempotency    # Race condition test
+npm run test:load:socket         # Real-time WebSocket connection load test
 
 # Run with custom users or duration
 k6 run --vus 20 --duration 30s backend/tests/load/job-ingestion.js

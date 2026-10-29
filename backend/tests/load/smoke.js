@@ -23,7 +23,7 @@ export default function (data) {
     'GET /health returns 200': (r) => r.status === 200,
     'Health status is ok': (r) => {
       try {
-        return JSON.parse(r.body).status === 'ok';
+        return JSON.parse(r.body).status?.toLowerCase() === 'ok';
       } catch (e) {
         return false;
       }
@@ -46,6 +46,18 @@ export default function (data) {
 
   check(jobsRes, {
     'GET /api/jobs returns 200': (r) => r.status === 200,
+  });
+
+  // 4. Check Socket.IO Handshake / Polling Endpoint
+  const socketRes = http.get(`${BASE_URL}/socket.io/?EIO=4&transport=polling`, {
+    headers: {
+      Cookie: `accessToken=${data.token}`,
+    },
+  });
+
+  check(socketRes, {
+    'Socket.IO handshake returns 200': (r) => r.status === 200,
+    'Socket.IO session opened': (r) => r.body.startsWith('0{') && r.body.includes('sid'),
   });
 
   sleep(1);

@@ -1,3 +1,4 @@
+const mongoose = require("mongoose");
 const Job = require("../../models/job");
 const logger = require("../../utils/logger");
 

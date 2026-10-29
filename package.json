@@ -13,7 +13,8 @@
     "test:load:smoke": "npm --prefix backend run test:load:smoke",
     "test:load:jobs": "npm --prefix backend run test:load:jobs",
     "test:load:rate-limit": "npm --prefix backend run test:load:rate-limit",
-    "test:load:idempotency": "npm --prefix backend run test:load:idempotency"
+    "test:load:idempotency": "npm --prefix backend run test:load:idempotency",
+    "test:load:socket": "npm --prefix backend run test:load:socket"
   },
   "keywords": [
     "bullmq",

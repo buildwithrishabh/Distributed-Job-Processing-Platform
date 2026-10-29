@@ -8,11 +8,11 @@
 [![Prometheus](https://img.shields.io/badge/Prometheus-v2.x-E6522C?style=flat&logo=prometheus&logoColor=white)](https://prometheus.io/)
 [![Grafana](https://img.shields.io/badge/Grafana-v10-F46800?style=flat&logo=grafana&logoColor=white)](https://grafana.com/)
 [![Pino](https://img.shields.io/badge/Pino-Structured%20Logging-68A063?style=flat&logo=pino&logoColor=white)](https://getpino.io/)
-[![Tests](https://img.shields.io/badge/Tests-100%2F100%20Passed-brightgreen?style=flat&logo=vitest&logoColor=white)](https://vitest.dev/)
+[![Tests](https://img.shields.io/badge/Tests-137%2F137%20Passed-brightgreen?style=flat&logo=vitest&logoColor=white)](https://vitest.dev/)
 [![React](https://img.shields.io/badge/React-18-61DAFB?style=flat&logo=react&logoColor=black)](https://react.dev/)
 [![Docker](https://img.shields.io/badge/Docker-Compose%20Ready-2496ED?style=flat&logo=docker&logoColor=white)](https://docker.com/)
 
-An enterprise-grade, high-throughput distributed background job processing platform. Built with **Node.js (Express 5)**, **Redis (BullMQ)**, **MongoDB**, and a modern **React SPA dashboard**, fully instrumented with **Prometheus**, **Grafana**, **Pino structured logging**, and a **100-test Vitest test suite**.
+An enterprise-grade, high-throughput distributed background job processing platform. Built with **Node.js (Express 5)**, **Redis (BullMQ)**, **MongoDB**, and a modern **React SPA dashboard**, fully instrumented with **Prometheus**, **Grafana**, **Pino structured logging**, and a **137-test Vitest test suite**.
 
 Designed to decouple heavy, asynchronous workloads (e.g., transactional emails, batch processing, notifications) from web servers, preventing HTTP request blocking while ensuring at-least-once delivery, fault tolerance, and horizontal scalability.
 
@@ -153,7 +153,7 @@ stateDiagram-v2
 - **Request Tracing**: `x-request-id` propagation for end-to-end trace correlation and child loggers attached to each background task.
 
 ### 4. Comprehensive Automated Test Suite (100 Tests)
-- **100/100 tests passing** across 17 test files powered by **Vitest** and **Supertest**.
+- **137/137 tests passing** across 23 test files powered by **Vitest** and **Supertest**.
 - Full coverage for middleware (JWT auth, rate limiting, idempotency, backpressure, validation), service layers, processor retry behaviors, and REST integration endpoints.
 - Tests run in fully isolated environments — no live cloud dependencies required.
 
@@ -179,7 +179,7 @@ stateDiagram-v2
 | **Metrics & Telemetry** | Prometheus, `prom-client` | Time-series metrics collection, queue depth, HTTP latencies, system stats |
 | **Visualization** | Grafana 10 | Auto-provisioned dashboards for real-time cluster health and queues |
 | **Structured Logging** | Pino, Pino-HTTP | High-throughput structured JSON logging, PII redaction, request tracing |
-| **Automated Testing** | Vitest, Supertest | Fast unit and integration test suites (100 passing tests) |
+| **Automated Testing** | Vitest, Supertest | Fast unit and integration test suites (137 passing tests) |
 | **Security & Auth** | JWT, bcryptjs, Helmet, CORS | Secure password hashing, HTTP-only cookie tokens, security headers |
 | **Email Provider** | Brevo REST API | Transactional email delivery with automatic simulation fallback |
 | **Containerization** | Docker, Docker Compose | Multi-container development and production orchestration |
@@ -219,7 +219,7 @@ Visualizes:
 The codebase includes comprehensive unit and integration testing powered by **Vitest**:
 
 ```bash
-# Run all 100 tests
+# Run all 137 tests
 npm --prefix backend test
 
 # Run tests in watch mode
@@ -227,14 +227,15 @@ npm --prefix backend run test:watch
 ```
 
 ### Test Suite Highlights:
-- **17 Test Suites, 100 Tests (100% Pass)**
-- **Unit Tests (11 files)**:
+- **23 Test Suites, 137 Tests (100% Pass)**
+- **Unit Tests (17 files, 92 tests)**:
   - Middlewares: `auth.test.js`, `rateLimiter.test.js`, `idempotency.test.js`, `backpressure.test.js`, `validateRequest.test.js`
+  - Socket.IO: `auth.middleware.test.js`, `jobHandler.test.js`, `queueEvents.test.js`, `socketIndex.test.js`
   - Services: `jobService.test.js`, `dlqService.test.js`, `monitoringService.test.js`
   - Processors: `email.processor.test.js` (Simulated network latency, retries, fatal input routing, Brevo API dispatch)
-  - Utilities: `jwt.test.js`, `lock.test.js` (Distributed lock concurrency & TTLs), `timeout.test.js`
-- **Integration Tests (6 files)**:
-  - End-to-end HTTP API tests using Supertest for Authentication, Job Ingestion & Cancellation, Dead Letter Queue Replay, Cluster Monitoring, and Health Probes.
+  - Utilities: `jwt.test.js`, `lock.test.js` (Distributed lock concurrency & TTLs), `timeout.test.js`, `metrics.test.js` (Prometheus metric collectors & dynamic gauges)
+- **Integration Tests (6 files, 45 tests)**:
+  - End-to-end HTTP and WebSocket API tests using Supertest and Socket.IO-Client for Authentication, Job Ingestion & Cancellation, Dead Letter Queue Replay, Cluster Monitoring, Prometheus Metrics Scraping, and Real-Time Socket Events.
 
 ---
 

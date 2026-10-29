@@ -31,4 +31,14 @@ describe("Integration: Health & System Routes", () => {
     expect(res.headers["x-content-type-options"]).toBe("nosniff");
     expect(res.headers["x-frame-options"]).toBeDefined();
   });
+
+  it("GET /metrics should return 200 OK with Prometheus metrics text format", async () => {
+    const res = await request(app).get("/metrics");
+
+    expect(res.status).toBe(200);
+    expect(res.headers["content-type"]).toContain("text/plain");
+    expect(res.text).toContain("process_cpu_user_seconds_total");
+    expect(res.text).toContain("http_request_duration_seconds");
+    expect(res.text).toContain("http_request_total");
+  });
 });
