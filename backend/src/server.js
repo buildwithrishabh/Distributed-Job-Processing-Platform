@@ -1,5 +1,7 @@
 const mongoose = require("mongoose");
 const app = require("./app");
+const http = require("http");
+const { initSocketIO , closeSocketIO } = require("./socket");
 const connectDB = require("./config/db");
 const env = require("./config/env");
 const redisClient = require("./config/redis");
@@ -9,11 +11,16 @@ const logger = require("./utils/logger");
 const startServer = async () => {
   await connectDB();
 
+  // create http server wrapping Express
+  const server = http.createServer(app);
+
+  initSocketIO(server);
+
   // 1. Store app.listen instance in `server` variable
-  const server = app.listen(env.PORT, () => {
+  server.listen(env.PORT, () => {
     logger.info(
       { port: env.PORT, env: env.NODE_ENV },
-      `[HTTP Server] Running in ${env.NODE_ENV} mode on port ${env.PORT}`
+      `[HTTP Server] Running in ${env.NODE_ENV} mode on port ${env.PORT}`,
     );
   });
 
@@ -23,7 +30,10 @@ const startServer = async () => {
 
   // 2. Graceful Shutdown Handler
   const shutdown = async (signal) => {
-    logger.info({ signal }, `[HTTP Server] ${signal} received. Closing HTTP server...`);
+    logger.info(
+      { signal },
+      `[HTTP Server] ${signal} received. Closing HTTP server...`,
+    );
 
     if (stopSweeper) {
       stopSweeper();
@@ -34,6 +44,8 @@ const startServer = async () => {
       logger.info("[HTTP Server] HTTP server closed.");
 
       try {
+        await closeSocketIO();
+
         await mongoose.connection.close();
         logger.info("[MongoDB] Database connection closed.");
 
@@ -42,7 +54,10 @@ const startServer = async () => {
 
         process.exit(0);
       } catch (err) {
-        logger.error({ err }, "[Shutdown Error] Failed during graceful shutdown");
+        logger.error(
+          { err },
+          "[Shutdown Error] Failed during graceful shutdown",
+        );
         process.exit(1);
       }
     });

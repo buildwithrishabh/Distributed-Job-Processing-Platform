@@ -11,6 +11,7 @@ import { api } from "../api";
 import { errorText } from "../utils";
 import { ErrorPanel, PageHeading, StatusDropdown } from "./Common";
 import { JobsTable, Pagination } from "./JobsTable";
+import { useSocket } from "../context/SocketContext";
 
 export function JobsView({ onSelectJob, onCreate, notify }) {
   const [status, setStatus] = useState("");
@@ -20,6 +21,8 @@ export function JobsView({ onSelectJob, onCreate, notify }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [retryingId, setRetryingId] = useState("");
+
+  const { socket } = useSocket();
 
   const load = useCallback(() => {
     setLoading(true);
@@ -34,6 +37,45 @@ export function JobsView({ onSelectJob, onCreate, notify }) {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Live real-time updates from WebSocket
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleJobUpdated = (payload) => {
+      setData((prev) => {
+        if (!prev?.jobs) return prev;
+        const exists = prev.jobs.some((j) => j.jobId === payload.jobId);
+        if (!exists) {
+          // If a new job was enqueued and we are on page 1, reload in background
+          if (page === 1 && (!status || status === payload.status)) {
+            api.jobs(page, 10, status).then(setData).catch(() => {});
+          }
+          return prev;
+        }
+
+        return {
+          ...prev,
+          jobs: prev.jobs.map((job) => {
+            if (job.jobId !== payload.jobId) return job;
+            return {
+              ...job,
+              status: payload.status || job.status,
+              attempts: payload.attempts !== undefined ? payload.attempts : job.attempts,
+              completedAt: payload.completedAt || job.completedAt,
+              error: payload.error ? { message: payload.error } : job.error,
+            };
+          }),
+        };
+      });
+    };
+
+    socket.on("job:updated", handleJobUpdated);
+    return () => {
+      socket.off("job:updated", handleJobUpdated);
+    };
+  }, [socket, page, status]);
+
 
   const pages = Math.max(1, Math.ceil((data?.total || 0) / (data?.limit || 10)));
 

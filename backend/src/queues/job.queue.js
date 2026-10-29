@@ -36,6 +36,7 @@ async function addJobToQueue(jobRecord) {
     {
       mongoId: jobRecord._id ? jobRecord._id.toString() : null,
       jobId: jobRecord.jobId,
+      userId: jobRecord.userId?.toString(),
       type: jobRecord.type,
       payload: jobRecord.payload,
     },

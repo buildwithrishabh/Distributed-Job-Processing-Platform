@@ -9,6 +9,7 @@ import { api } from "../api";
 import { errorText } from "../utils";
 import { ErrorPanel, PageHeading } from "./Common";
 import { JobsTable, Pagination } from "./JobsTable";
+import { useSocket } from "../context/SocketContext";
 
 export function DeadJobsView({ onSelectJob, notify }) {
   const [page, setPage] = useState(1);
@@ -16,6 +17,8 @@ export function DeadJobsView({ onSelectJob, notify }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
+
+  const { socket } = useSocket();
 
   const load = useCallback(() => {
     setLoading(true);
@@ -33,6 +36,19 @@ export function DeadJobsView({ onSelectJob, notify }) {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Live updates for DLQ
+  useEffect(() => {
+    if (!socket) return;
+    const handleJobUpdated = (payload) => {
+      if (payload.status === "DEAD" || payload.status === "RETRYING") {
+        load();
+      }
+    };
+    socket.on("job:updated", handleJobUpdated);
+    return () => socket.off("job:updated", handleJobUpdated);
+  }, [socket, load]);
+
 
   async function retry(event, id) {
     event.stopPropagation();

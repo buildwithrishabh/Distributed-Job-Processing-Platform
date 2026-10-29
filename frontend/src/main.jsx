@@ -13,7 +13,7 @@ import {
   X,
 } from "lucide-react";
 import { api } from "./api";
-import { nav } from "./utils";
+import { nav, shortId } from "./utils";
 import { MobileDesktopOnlyNotice } from "./components/Common";
 import { AuthScreen } from "./components/AuthScreen";
 import { HelpSupportPage } from "./components/HelpSupportPage";
@@ -23,48 +23,22 @@ import { DeadJobsView } from "./components/DeadJobsView";
 import { WorkerTelemetry } from "./components/WorkerTelemetry";
 import { JobSubmitModal } from "./components/JobSubmitModal";
 import { JobDetailModal } from "./components/JobDetailModal";
+import { SocketProvider, useSocket } from "./context/SocketContext";
 import "./styles.css";
 
-function App() {
-  const [user, setUser] = useState(null);
-  const [authChecking, setAuthChecking] = useState(true);
+function DashboardShell({ user, onSignOut }) {
   const [page, setPage] = useState("overview");
   const [mobileOpen, setMobileOpen] = useState(false);
   const [notice, setNotice] = useState(null);
   const [detail, setDetail] = useState(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
-  const [isMobileScreen, setIsMobileScreen] = useState(
-    typeof window !== "undefined" ? window.innerWidth < 860 : false
-  );
 
-  useEffect(() => {
-    const handleResize = () => {
-      setIsMobileScreen(window.innerWidth < 860);
-    };
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, []);
+  const { socket, isConnected, connectionError } = useSocket();
 
   const notify = useCallback((message, kind = "success") => {
     setNotice({ message, kind });
     window.setTimeout(() => setNotice(null), 4500);
-  }, []);
-
-  useEffect(() => {
-    api
-      .me()
-      .then((data) => setUser(data.user))
-      .catch(() => setUser(null))
-      .finally(() => setAuthChecking(false));
-  }, []);
-
-  useEffect(() => {
-    const handleUnauthorized = () => {
-      setUser(null);
-    };
-    window.addEventListener("auth:unauthorized", handleUnauthorized);
-    return () => window.removeEventListener("auth:unauthorized", handleUnauthorized);
   }, []);
 
   // Global ESC key listener to close modal drawers
@@ -79,28 +53,28 @@ function App() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [createOpen, detail]);
 
-  const signOut = async () => {
-    await api.logout().catch(() => {});
-    setUser(null);
-    setPage("overview");
-  };
+  // Global background notifications for terminal job events.
+  // Fix #6: skip the toast if the detail modal is already open for that job —
+  // the user can see the status change in real time inside the drawer, so a
+  // redundant toast would be noise.
+  useEffect(() => {
+    if (!socket) return;
 
-  if (isMobileScreen) {
-    return <MobileDesktopOnlyNotice />;
-  }
+    const handleGlobalJobUpdate = (payload) => {
+      if (detail === payload.jobId) return;
 
-  if (authChecking) {
-    return (
-      <div className="splash">
-        <div className="brand-mark">Q</div>
-        <LoaderCircle className="spin" size={18} />
-      </div>
-    );
-  }
+      if (payload.status === "COMPLETED") {
+        notify(`Job ${shortId(payload.jobId)} completed successfully`, "success");
+      } else if (payload.status === "FAILED" || payload.status === "DEAD") {
+        notify(`Job ${shortId(payload.jobId)} failed: ${payload.error || "Execution error"}`, "error");
+      }
+    };
 
-  if (!user) {
-    return <AuthScreen onLogin={setUser} notify={notify} />;
-  }
+    socket.on("job:updated", handleGlobalJobUpdate);
+    return () => {
+      socket.off("job:updated", handleGlobalJobUpdate);
+    };
+  }, [socket, notify, detail]);
 
   const current = nav.find((item) => item.id === page);
   const pageTitle = page === "docs" ? "Help & support" : current?.label;
@@ -150,8 +124,18 @@ function App() {
         </nav>
 
         <div className="sidebar-bottom">
-          <div className="api-chip">
-            <span className="live-dot" /> Authenticated{" "}
+          <div
+            className="api-chip"
+            title={
+              isConnected
+                ? "Real-time WebSocket connected"
+                : connectionError === "auth"
+                ? "Authentication error — please sign out and sign back in"
+                : "Reconnecting to WebSocket server..."
+            }
+          >
+            <span className={`live-dot ${isConnected ? "connected" : "disconnected"}`} />
+            {isConnected ? "Live (WebSocket)" : connectionError === "auth" ? "Auth Error" : "Connecting..."}{" "}
             <span className="api-chip-right">v1</span>
           </div>
           <button
@@ -173,7 +157,7 @@ function App() {
               <strong>{user.name}</strong>
               <span>{user.email}</span>
             </div>
-            <button title="Sign out" className="icon-button" onClick={signOut}>
+            <button title="Sign out" className="icon-button" onClick={onSignOut}>
               <LogOut size={16} />
             </button>
           </div>
@@ -202,8 +186,18 @@ function App() {
             <strong>{pageTitle}</strong>
           </div>
           <div className="top-actions">
-            <span className="environment">
-              <span className="live-dot" /> Authenticated
+            <span
+              className="environment"
+              title={
+                isConnected
+                  ? "Real-time WebSocket connected"
+                  : connectionError === "auth"
+                  ? "Authentication error — please sign out and sign back in"
+                  : "WebSocket disconnected"
+              }
+            >
+              <span className={`live-dot ${isConnected ? "connected" : "disconnected"}`} />
+              {isConnected ? "Live" : connectionError === "auth" ? "Auth Error" : "Offline"}
             </span>
             <span className="top-separator" />
             <button
@@ -259,7 +253,6 @@ function App() {
           id={detail}
           onClose={() => setDetail(null)}
           onChanged={() => {
-            setDetail(null);
             setRefreshKey((v) => v + 1);
           }}
           notify={notify}
@@ -294,6 +287,66 @@ function App() {
         </div>
       )}
     </div>
+  );
+}
+
+function App() {
+  const [user, setUser] = useState(null);
+  const [authChecking, setAuthChecking] = useState(true);
+  const [isMobileScreen, setIsMobileScreen] = useState(
+    typeof window !== "undefined" ? window.innerWidth < 860 : false
+  );
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobileScreen(window.innerWidth < 860);
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  useEffect(() => {
+    api
+      .me()
+      .then((data) => setUser(data.user))
+      .catch(() => setUser(null))
+      .finally(() => setAuthChecking(false));
+  }, []);
+
+  useEffect(() => {
+    const handleUnauthorized = () => {
+      setUser(null);
+    };
+    window.addEventListener("auth:unauthorized", handleUnauthorized);
+    return () => window.removeEventListener("auth:unauthorized", handleUnauthorized);
+  }, []);
+
+  const signOut = async () => {
+    await api.logout().catch(() => {});
+    setUser(null);
+  };
+
+  if (isMobileScreen) {
+    return <MobileDesktopOnlyNotice />;
+  }
+
+  if (authChecking) {
+    return (
+      <div className="splash">
+        <div className="brand-mark">Q</div>
+        <LoaderCircle className="spin" size={18} />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <AuthScreen onLogin={setUser} notify={() => {}} />;
+  }
+
+  return (
+    <SocketProvider user={user}>
+      <DashboardShell user={user} onSignOut={signOut} />
+    </SocketProvider>
   );
 }
 

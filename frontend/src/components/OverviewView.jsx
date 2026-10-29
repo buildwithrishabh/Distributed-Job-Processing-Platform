@@ -10,11 +10,14 @@ import { errorText } from "../utils";
 import { ErrorPanel, PageHeading, PanelTitle } from "./Common";
 import { JobsTable } from "./JobsTable";
 import { MetricsCards } from "./MetricsCards";
+import { useSocket } from "../context/SocketContext";
 
 export function OverviewView({ onNavigate, onCreate, onSelectJob }) {
   const [data, setData] = useState(null);
   const [jobs, setJobs] = useState(null);
   const [error, setError] = useState("");
+
+  const { socket } = useSocket();
 
   const load = useCallback(() => {
     return Promise.all([api.overview(), api.jobs(1, 6)])
@@ -31,6 +34,20 @@ export function OverviewView({ onNavigate, onCreate, onSelectJob }) {
     const interval = setInterval(load, 15000);
     return () => clearInterval(interval);
   }, [load]);
+
+  // Live refresh overview counts when any job state changes
+  useEffect(() => {
+    if (!socket) return;
+    const handleJobUpdated = () => {
+      load();
+    };
+
+    socket.on("job:updated", handleJobUpdated);
+    return () => {
+      socket.off("job:updated", handleJobUpdated);
+    };
+  }, [socket, load]);
+
 
   if (error && !data) {
     return (

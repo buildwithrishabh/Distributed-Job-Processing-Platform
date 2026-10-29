@@ -11,6 +11,7 @@ import { api } from "../api";
 import { errorText, fmtDate, shortId } from "../utils";
 import { ErrorPanel } from "./Common";
 import { LoadingRows, Status } from "./JobsTable";
+import { useSocket } from "../context/SocketContext";
 
 export function DetailField({ label, value, mono }) {
   return (
@@ -27,10 +28,92 @@ export function JobDetailModal({ id, onClose, onChanged, notify }) {
   const [busy, setBusy] = useState(false);
   const [copiedId, setCopiedId] = useState(false);
   const [copiedPayload, setCopiedPayload] = useState(false);
+  const [liveProgress, setLiveProgress] = useState(null);
+
+  const { socket, subscribeToJob, unsubscribeFromJob } = useSocket();
 
   useEffect(() => {
     api.job(id).then(setJob).catch((e) => setError(errorText(e)));
   }, [id]);
+
+  // Fix #4: merged subscribe + listener setup into a single effect.
+  // Listeners are registered FIRST, then the job room subscription is emitted,
+  // eliminating the race window where an event could arrive between the two
+  // previously separate effects.
+  // Fix #5: onCompleted re-fetches from the server instead of faking
+  // completedAt with the client clock; same for failedAt in onFailed.
+  useEffect(() => {
+    if (!socket || !id) return;
+
+    const onProgress = (data) => {
+      if (data.jobId === id) {
+        const val = typeof data.progress === "number" ? data.progress : data.progress?.percent ?? 50;
+        setLiveProgress(val);
+      }
+    };
+
+    const onState = (data) => {
+      if (data.jobId === id) {
+        setJob((prev) => (prev ? { ...prev, status: data.status } : prev));
+        onChanged?.();
+      }
+    };
+
+    const onCompleted = async (data) => {
+      if (data.jobId === id) {
+        try {
+          // Re-fetch from server to get the real server-side completedAt timestamp
+          const updated = await api.job(id);
+          setJob(updated);
+        } catch {
+          // Fallback: apply known fields without a fake client-side timestamp
+          setJob((prev) =>
+            prev ? { ...prev, status: "COMPLETED", result: data.result } : prev
+          );
+        }
+        setLiveProgress(100);
+        onChanged?.();
+      }
+    };
+
+    const onFailed = async (data) => {
+      if (data.jobId === id) {
+        try {
+          // Re-fetch from server to get the real server-side failedAt timestamp
+          const updated = await api.job(id);
+          setJob(updated);
+        } catch {
+          // Fallback: apply known fields without a fake client-side timestamp
+          setJob((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  status: data.status || "FAILED",
+                  error: { message: data.reason || "Job failed" },
+                }
+              : prev
+          );
+        }
+        onChanged?.();
+      }
+    };
+
+    socket.on("job:progress", onProgress);
+    socket.on("job:state", onState);
+    socket.on("job:completed", onCompleted);
+    socket.on("job:failed", onFailed);
+
+    // Subscribe to the job room AFTER listeners are registered
+    subscribeToJob(id);
+
+    return () => {
+      socket.off("job:progress", onProgress);
+      socket.off("job:state", onState);
+      socket.off("job:completed", onCompleted);
+      socket.off("job:failed", onFailed);
+      unsubscribeFromJob(id);
+    };
+  }, [socket, id, onChanged, subscribeToJob, unsubscribeFromJob]);
 
   const copyToClipboard = async (text, type) => {
     try {
@@ -108,6 +191,21 @@ export function JobDetailModal({ id, onClose, onChanged, notify }) {
               </button>
             </div>
 
+            {(job.status === "PROCESSING" || liveProgress !== null) && (
+              <div className="live-progress-container">
+                <div className="live-progress-header">
+                  <span>LIVE EXECUTION PROGRESS</span>
+                  <strong>{liveProgress !== null ? `${liveProgress}%` : "In progress..."}</strong>
+                </div>
+                <div className="live-progress-track">
+                  <div
+                    className="live-progress-fill"
+                    style={{ width: `${liveProgress !== null ? Math.min(100, Math.max(5, liveProgress)) : 50}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
             <div className="detail-grid">
               <DetailField label="Job ID" value={job.jobId} mono />
               <DetailField label="Type" value={job.type} />
@@ -152,6 +250,15 @@ export function JobDetailModal({ id, onClose, onChanged, notify }) {
               </div>
               <pre>{JSON.stringify(job.payload || {}, null, 2)}</pre>
             </div>
+
+            {job.result && (
+              <div className="payload-block">
+                <div>
+                  <span style={{ color: "var(--green-text)" }}>EXECUTION RESULT</span>
+                </div>
+                <pre>{typeof job.result === "string" ? job.result : JSON.stringify(job.result, null, 2)}</pre>
+              </div>
+            )}
 
             <div className="drawer-footer">
               {job.status === "PENDING" ? (
