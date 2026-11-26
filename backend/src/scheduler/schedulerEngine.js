@@ -3,6 +3,7 @@ const Schedule = require("../models/schedule");
 const { createJobService } = require("../services/jobService");
 const { SCHEDULE_STATUS, SCHEDULE_TYPES } = require("../config/constant");
 const logger = require("../utils/logger");
+const { computeNextRunAt } = require("../utils/cronHelper");
 
 const POLL_INTERVAL_MS = 5000; // Poll in every 5 seconds
 
@@ -62,11 +63,26 @@ async function processDueSchedules() {
             },
           );
         } else {
-          // Recurring schedule: recurrence calculation
-          // abhi implement karna baaki hai.
-          logger.warn(
-            { scheduleId: schedule.scheduleId },
-            "[Scheduler] Recurring schedule requires next occurrence calculation",
+          const nextRun = computeNextRunAt(
+            schedule.cronExpression,
+            schedule.timezone || "UTC",
+            now,
+          );
+
+          await Schedule.findOneAndUpdate(
+            {
+              _id: schedule._id,
+              status: SCHEDULE_STATUS.ACTIVE,
+              nextRunAt: scheduledFor,
+            },
+            {
+              $set: {
+                nextRunAt: nextRun,
+                lastRunAt: now,
+                lastJobId: job.jobId,
+              },
+              $inc: {runCount: 1}
+            },
           );
         }
       } catch (err) {

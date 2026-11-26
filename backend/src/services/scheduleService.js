@@ -4,6 +4,7 @@ const {
   SCHEDULE_STATUS,
   SCHEDULE_TYPES,
 } = require("../config/constant");
+const { computeNextRunAt } = require("../utils/cronHelper");
 
 const createScheduleService = async ({
   userId,
@@ -14,11 +15,13 @@ const createScheduleService = async ({
   runAt,
   priority,
   maxAttempts,
+  cronExpression = null,
+  timezone = "UTC"
 }) => {
   const scheduleId = `sched_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
   const nextRunAt =
-    scheduleType === SCHEDULE_TYPES.ONCE ? new Date(runAt) : null;
+    scheduleType === SCHEDULE_TYPES.ONCE ? new Date(runAt) : computeNextRunAt(cronExpression , timezone, new Date());
 
   const schedule = await Schedule.create({
     scheduleId,
@@ -32,6 +35,8 @@ const createScheduleService = async ({
     priority,
     maxAttempts,
     status: SCHEDULE_STATUS.ACTIVE,
+    cronExpression,
+    timezone,
   });
 
   return schedule;

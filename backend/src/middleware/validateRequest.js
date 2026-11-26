@@ -1,5 +1,6 @@
 const { z } = require("zod");
 const { JOB_TYPES, SCHEDULE_TYPES } = require("../config/constant");
+const { isValidTimeZone, computeNextRunAt } = require("../utils/cronHelper");
 
 // Define Job Creation Schema using Zod
 const createJobSchema = z.object({
@@ -52,6 +53,8 @@ const createScheduleSchema = z
     runAt: z.string().datetime().optional(), // ISO string
     priority: z.number().min(0).optional().default(0),
     maxAttempts: z.number().int().min(1).optional().default(3),
+    cronExpression: z.string().trim().optional(),
+    timezone: z.string().trim().optional().default("UTC"),
   })
   .refine(
     (data) => {
@@ -63,9 +66,34 @@ const createScheduleSchema = z
       return true;
     },
     {
-      message:
-        "For ONCE schedules, runAt must be a valid future ISO timestamp",
+      message: "For ONCE schedules, runAt must be a valid future ISO timestamp",
       path: ["runAt"],
+    },
+  )
+  .refine(
+    (data) => isValidTimeZone(data.timezone),
+    {
+      message: "Invalid IANA timezone",
+      path: ["timezone"],
+    },
+  )
+  .refine(
+    (data) => {
+      if (data.scheduleType === SCHEDULE_TYPES.RECURRING) {
+        if (!data.cronExpression) return false;
+        try {
+          return Boolean(
+            computeNextRunAt(data.cronExpression, data.timezone, new Date()),
+          );
+        } catch {
+          return false;
+        }
+      }
+      return true;
+    },
+    {
+      message: "For RECURRING schedules, a valid cronExpression is required",
+      path: ["cronExpression"],
     },
   );
 
