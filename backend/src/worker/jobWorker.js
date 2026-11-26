@@ -1,4 +1,6 @@
 const { Worker } = require("bullmq");
+const schedule = require("../models/schedule");
+const scheduleExecution = require("../models/scheduleExecution");
 const bullMQConnection = require("../config/queueConnection");
 const { QUEUE_NAME } = require("../queues/job.queue");
 const Job = require("../models/job");
@@ -21,7 +23,9 @@ const createJobWorker = (workerId, concurrency = 5) => {
 
       const lockToken = await acquireLock(`worker:job:${jobId}`, 20);
       if (!lockToken) {
-        jobLog.warn("Job is already being processed by another worker. Skipping.");
+        jobLog.warn(
+          "Job is already being processed by another worker. Skipping.",
+        );
         throw new Error(`Could not acquire lock for job: ${jobId}`);
       }
 
@@ -71,8 +75,8 @@ const createJobWorker = (workerId, concurrency = 5) => {
         jobLog.debug({ payload }, "Processing job with payload");
 
         // Execute dispatch to matched job processor strategy with timeout wrapper
-        const result = await withTimeout((signal) => 
-          processJobDispatch(type, payload, job , signal ),
+        const result = await withTimeout(
+          (signal) => processJobDispatch(type, payload, job, signal),
           JOB_TIMEOUT_MS,
         );
 
@@ -86,6 +90,13 @@ const createJobWorker = (workerId, concurrency = 5) => {
             completedAt: new Date(),
           },
         );
+
+        if (processingDb.scheduleId) {
+          await scheduleExecution.findOneAndUpdate(
+            { jobId },
+            { status: "COMPLETED" },
+          );
+        }
 
         jobLog.info("Completed job successfully");
         return { success: true, jobId, result };
@@ -121,10 +132,10 @@ const createJobWorker = (workerId, concurrency = 5) => {
         status: newStatus,
         err,
       },
-      `[${workerId}] Job ${jobId} failed (Attempt ${attemptsMade}/${maxAttempts}). Status: ${newStatus}`
+      `[${workerId}] Job ${jobId} failed (Attempt ${attemptsMade}/${maxAttempts}). Status: ${newStatus}`,
     );
 
-    await Job.findOneAndUpdate(
+    const updatedJob = await Job.findOneAndUpdate(
       {
         jobId,
         status: { $nin: [JOB_STATUS.COMPLETED, JOB_STATUS.CANCELLED] },
@@ -138,11 +149,28 @@ const createJobWorker = (workerId, concurrency = 5) => {
           failedAt: new Date(),
         },
       },
+      { new: true },
     );
+
+    if (isDead && updatedJob?.scheduleId) {
+      await Promise.all([
+        scheduleExecution.findOneAndUpdate(
+          { jobId },
+          { status: "FAILED", error: err.message },
+        ),
+        schedule.findOneAndUpdate(
+          { scheduleId: updatedJob.scheduleId },
+          { $inc: { failureCount: 1 } },
+        ),
+      ]);
+    }
   });
 
   worker.on("error", (err) => {
-    logger.error({ workerId, err }, `[${workerId}] Internal worker error: ${err.message}`);
+    logger.error(
+      { workerId, err },
+      `[${workerId}] Internal worker error: ${err.message}`,
+    );
   });
   return worker;
 };

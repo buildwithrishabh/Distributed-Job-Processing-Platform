@@ -21,6 +21,15 @@ const jobSchema = new mongoose.Schema(
       enum: Object.values(JOB_TYPES),
       index: true,
     },
+    scheduleId: {
+      type: String,
+      default: null,
+      index: true,
+    },
+    scheduledFor: {
+      type: Date,
+      default: null,
+    },
     payload: {
       type: mongoose.Schema.Types.Mixed,
       default: {},

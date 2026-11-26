@@ -13,6 +13,8 @@ const createJobService = async ({
   idempotencyKey = null,
   idempotencyRedisKey = null,
   userId = null,
+  scheduleId = null,
+  scheduledFor = null,
 }) => {
   if (!userId) {
     const error = new Error("User ID is required to create a job");
@@ -32,6 +34,8 @@ const createJobService = async ({
       maxAttempts,
       ...(idempotencyKey ? { idempotencyKey } : {}), // comes from header sent by client (only stored if provided)
       userId,
+      ...(scheduleId ? { scheduleId } : {}),
+      ...(scheduledFor ? { scheduledFor } : {}),
     });
 
     if (idempotencyRedisKey) {

@@ -1,11 +1,12 @@
 const mongoose = require("mongoose");
 const app = require("./app");
 const http = require("http");
-const { initSocketIO , closeSocketIO } = require("./socket");
+const { initSocketIO, closeSocketIO } = require("./socket");
 const connectDB = require("./config/db");
 const env = require("./config/env");
 const redisClient = require("./config/redis");
 const { startOrphanJobSweeper } = require("./cron/orphanJobSweeper");
+const { startScheduler } = require("./scheduler/schedulerEngine");
 const logger = require("./utils/logger");
 
 const startServer = async () => {
@@ -28,6 +29,9 @@ const startServer = async () => {
   const stopSweeper = startOrphanJobSweeper();
   logger.info("[Sweeper] Orphan job sweeper started.");
 
+  const stopScheduler = startScheduler();
+  logger.info("[Scheduler] Job Scheduler Started");
+
   // 2. Graceful Shutdown Handler
   const shutdown = async (signal) => {
     logger.info(
@@ -38,6 +42,11 @@ const startServer = async () => {
     if (stopSweeper) {
       stopSweeper();
       logger.info("[Sweeper] Orphan job sweeper stopped.");
+    }
+
+    if (stopScheduler) {
+      stopScheduler();
+      logger.info("[Scheduler] Job scheduler stopped.");
     }
 
     server.close(async () => {

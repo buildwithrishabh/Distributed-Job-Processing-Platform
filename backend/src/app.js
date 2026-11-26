@@ -7,6 +7,7 @@ const authRoutes = require("./routes/authRoutes");
 const jobRoutes = require("./routes/jobRoutes");
 const dlqRoutes = require("./routes/dlqRoutes");
 const monitoringRoutes = require("./routes/monitoringRoutes");
+const scheduleRoutes = require("./routes/scheduleRoutes");
 const errorHandler = require("./middleware/errorHandler");
 
 const app = express();
@@ -75,6 +76,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api", dlqRoutes);
 app.use("/api", jobRoutes);
 app.use("/api", monitoringRoutes);
+app.use("/api/schedules", scheduleRoutes);
 
 // Health check endpoint
 app.get("/health", (req, res) => {
