@@ -164,6 +164,15 @@ Tells us if workers are keeping up or falling behind:
 - `job_execution_duration_seconds` *(Histogram)*: Time taken to process jobs, bucketed across `[0.1s, 0.5s, 1s, 2s, 5s, 10s, 15s]`.
 - `jobs_processed_total` *(Counter)*: Total jobs processed, labeled by `job_type` (e.g., `EMAIL`) and `status` (`COMPLETED` or `FAILED`).
 
+#### D. Job Scheduler Metrics
+Tells us if scheduled jobs (one-time & recurring cron) are firing on time without drift:
+- `scheduler_triggers_total` *(Counter)*: Total schedule trigger attempts, labeled by `status` (`triggered`, `skipped`, `failed`).
+- `scheduler_tick_duration_seconds` *(Histogram)*: How long each 5-second scheduler polling tick takes (`[0.01s, 0.05s, 0.1s, 0.5s, 1s, 2.5s, 5s]`).
+- `scheduler_trigger_lag_seconds` *(Histogram)*: Delay (`triggeredAt - scheduledFor`) in seconds. High lag means the scheduler is falling behind.
+- `scheduler_schedules_count` *(Gauge)*: Current number of schedules in MongoDB grouped by `status` (`ACTIVE`, `PAUSED`, `COMPLETED`, `CANCELLED`).
+
+> **How the Scheduler avoids duplicate runs across replicas:** Each polling tick acquires a per-schedule Redis distributed lock (`lock:scheduler:schedule:<id>`), atomically advances `nextRunAt` in MongoDB via `findOneAndUpdate` **before** enqueueing, and attaches a deterministic `idempotencyKey` (`sched:<scheduleId>:<scheduledFor>`). Missed runs after downtime follow the schedule's `misfirePolicy` (`SKIP` or `RUN_ONCE`).
+
 ---
 
 ### 2. Prometheus Configuration

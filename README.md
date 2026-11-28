@@ -8,11 +8,11 @@
 [![Prometheus](https://img.shields.io/badge/Prometheus-v2.x-E6522C?style=flat&logo=prometheus&logoColor=white)](https://prometheus.io/)
 [![Grafana](https://img.shields.io/badge/Grafana-v10-F46800?style=flat&logo=grafana&logoColor=white)](https://grafana.com/)
 [![Pino](https://img.shields.io/badge/Pino-Structured%20Logging-68A063?style=flat&logo=pino&logoColor=white)](https://getpino.io/)
-[![Tests](https://img.shields.io/badge/Tests-137%2F137%20Passed-brightgreen?style=flat&logo=vitest&logoColor=white)](https://vitest.dev/)
+[![Tests](https://img.shields.io/badge/Tests-161%2F161%20Passed-brightgreen?style=flat&logo=vitest&logoColor=white)](https://vitest.dev/)
 [![React](https://img.shields.io/badge/React-18-61DAFB?style=flat&logo=react&logoColor=black)](https://react.dev/)
 [![Docker](https://img.shields.io/badge/Docker-Compose%20Ready-2496ED?style=flat&logo=docker&logoColor=white)](https://docker.com/)
 
-An enterprise-grade, high-throughput distributed background job processing platform. Built with **Node.js (Express 5)**, **Redis (BullMQ)**, **MongoDB**, and a modern **React SPA dashboard**, fully instrumented with **Prometheus**, **Grafana**, **Pino structured logging**, and a **137-test Vitest test suite**.
+An enterprise-grade, high-throughput distributed background job processing platform. Built with **Node.js (Express 5)**, **Redis (BullMQ)**, **MongoDB**, and a modern **React SPA dashboard**, fully instrumented with **Prometheus**, **Grafana**, **Pino structured logging**, a **distributed Cron Job Scheduler**, and a **161-test Vitest test suite**.
 
 Designed to decouple heavy, asynchronous workloads (e.g., transactional emails, batch processing, notifications) from web servers, preventing HTTP request blocking while ensuring at-least-once delivery, fault tolerance, and horizontal scalability.
 
@@ -48,6 +48,7 @@ flowchart TD
         PinoHTTP["pino-http Request Tracing (x-request-id)"]
         MetricsRoute["GET /metrics (prom-client exporter)"]
         Sweeper["Orphan Job Recovery Sweeper"]
+        Scheduler["Job Scheduler Engine (5s Poll)"]
     end
 
     subgraph StorageLayer ["3. State & Queue Coordination"]
@@ -80,6 +81,8 @@ flowchart TD
     API -->|"2. Enqueue Job (BullMQ)"| Redis
     Sweeper -.->|"Audit stuck PENDING jobs"| Mongo
     Sweeper -.->|"Re-enqueue orphan jobs"| Redis
+    Scheduler -.->|"Poll & Atomic Claim (Redis Lock)"| Mongo
+    Scheduler -.->|"Dispatch Due Jobs (BullMQ)"| Redis
 
     Redis -->|"Consume Task"| Worker1
     Redis -->|"Consume Task"| Worker2
@@ -152,16 +155,21 @@ stateDiagram-v2
 - **Security & PII Redaction**: Automatic zero-overhead removal of authorization headers, cookies, passwords, and API keys.
 - **Request Tracing**: `x-request-id` propagation for end-to-end trace correlation and child loggers attached to each background task.
 
-### 4. Comprehensive Automated Test Suite (100 Tests)
-- **137/137 tests passing** across 23 test files powered by **Vitest** and **Supertest**.
-- Full coverage for middleware (JWT auth, rate limiting, idempotency, backpressure, validation), service layers, processor retry behaviors, and REST integration endpoints.
+### 4. Comprehensive Automated Test Suite (161 Tests)
+- **161/161 tests passing** across 27 test files powered by **Vitest** and **Supertest**.
+- Full coverage for middleware (JWT auth, rate limiting, idempotency, backpressure, validation), service layers, distributed job scheduler (`cronHelper`, `scheduleService`, `schedulerEngine`), processor retry behaviors, and REST integration endpoints.
 - Tests run in fully isolated environments — no live cloud dependencies required.
 
-### 5. Idempotency & Duplicate Prevention
+### 5. Distributed Job Scheduler (One-Time & Recurring Cron)
+- **One-Time & Cron Schedules**: Supports `ONCE` (`runAt`) and `RECURRING` (`cronExpression` via `croner`) with full IANA timezone & DST support (`UTC`, `Asia/Kolkata`, `America/New_York`, etc.).
+- **Duplicate-Trigger Protection**: Combines a per-schedule Redis distributed lock (`acquireLock`), MongoDB atomic `findOneAndUpdate` claim-first semantics, and deterministic `idempotencyKey` (`sched:<scheduleId>:<scheduledFor>`).
+- **Lifecycle & Auditability**: Full CRUD, `pause` / `resume` / `cancel` / `delete`, configurable misfire policies (`SKIP` vs `RUN_ONCE`), and a dedicated `ScheduleExecution` history collection linked to generated `jobId`s.
+
+### 6. Idempotency & Duplicate Prevention
 - Endpoints accept an optional `Idempotency-Key` HTTP header.
 - Redis caches idempotency keys with short TTLs while MongoDB enforces a compound unique index `(userId, idempotencyKey)` to eliminate duplicate submissions from client retries or network blips.
 
-### 6. Queue Backpressure & Sliding-Window Rate Limiting
+### 7. Queue Backpressure & Sliding-Window Rate Limiting
 - Rejects incoming submissions with `503 Service Unavailable` if Redis queue depth exceeds `MAX_QUEUE_CAPACITY`.
 - Protects downstream APIs using atomic Redis sliding-window counter scripts (`RATE_LIMIT_MAX_REQUESTS` per `RATE_LIMIT_WINDOW_SECONDS`).
 
@@ -196,6 +204,7 @@ The backend exposes metrics on `GET /metrics` formatted for Prometheus:
 - **HTTP Metrics**: `http_request_duration_seconds` (Histogram by route & status), `http_request_total` (Counter).
 - **Queue Metrics**: `bullmq_queue_jobs_count` (Gauges for `waiting`, `active`, `delayed`, `failed`, `completed`).
 - **Worker & Job Metrics**: `job_platform_active_workers_count`, `job_execution_duration_seconds` (Histogram by job type), `jobs_processed_total` (Counter by status).
+- **Scheduler Metrics**: `scheduler_triggers_total` (Counter by `triggered` / `skipped` / `failed`), `scheduler_tick_duration_seconds` (Histogram), `scheduler_trigger_lag_seconds` (Histogram), `scheduler_schedules_count` (Gauge by schedule status).
 
 ### Grafana Pre-Configured Dashboard
 
@@ -219,7 +228,7 @@ Visualizes:
 The codebase includes comprehensive unit and integration testing powered by **Vitest**:
 
 ```bash
-# Run all 137 tests
+# Run all 161 tests
 npm --prefix backend test
 
 # Run tests in watch mode
@@ -227,15 +236,16 @@ npm --prefix backend run test:watch
 ```
 
 ### Test Suite Highlights:
-- **23 Test Suites, 137 Tests (100% Pass)**
-- **Unit Tests (17 files, 92 tests)**:
+- **27 Test Suites, 161 Tests (100% Pass)**
+- **Unit Tests (20 files, 110 tests)**:
   - Middlewares: `auth.test.js`, `rateLimiter.test.js`, `idempotency.test.js`, `backpressure.test.js`, `validateRequest.test.js`
   - Socket.IO: `auth.middleware.test.js`, `jobHandler.test.js`, `queueEvents.test.js`, `socketIndex.test.js`
-  - Services: `jobService.test.js`, `dlqService.test.js`, `monitoringService.test.js`
+  - Services: `jobService.test.js`, `scheduleService.test.js`, `dlqService.test.js`, `monitoringService.test.js`
+  - Scheduler: `schedulerEngine.test.js` (Distributed lock, atomic claim, misfire `SKIP`/`RUN_ONCE`)
   - Processors: `email.processor.test.js` (Simulated network latency, retries, fatal input routing, Brevo API dispatch)
-  - Utilities: `jwt.test.js`, `lock.test.js` (Distributed lock concurrency & TTLs), `timeout.test.js`, `metrics.test.js` (Prometheus metric collectors & dynamic gauges)
-- **Integration Tests (6 files, 45 tests)**:
-  - End-to-end HTTP and WebSocket API tests using Supertest and Socket.IO-Client for Authentication, Job Ingestion & Cancellation, Dead Letter Queue Replay, Cluster Monitoring, Prometheus Metrics Scraping, and Real-Time Socket Events.
+  - Utilities: `jwt.test.js`, `lock.test.js` (Distributed lock concurrency & TTLs), `timeout.test.js`, `metrics.test.js` (Prometheus metric collectors & dynamic gauges), `cronHelper.test.js` (Timezone & cron calculations)
+- **Integration Tests (7 files, 51 tests)**:
+  - End-to-end HTTP and WebSocket API tests using Supertest and Socket.IO-Client for Authentication, Job Ingestion & Cancellation, Job Scheduler (`/api/schedules`), Dead Letter Queue Replay, Cluster Monitoring, Prometheus Metrics Scraping, and Real-Time Socket Events.
 
 ---
 
@@ -245,15 +255,16 @@ npm --prefix backend run test:watch
 ├── backend/
 │   ├── src/
 │   │   ├── config/          # Zod env schema, MongoDB, Redis, and BullMQ connections
-│   │   ├── controllers/     # Route controllers (Auth, Jobs, Monitoring)
+│   │   ├── controllers/     # Route controllers (Auth, Jobs, Schedules, DLQ, Monitoring)
 │   │   ├── cron/            # Background orphan job sweeper & recovery
 │   │   ├── middleware/      # Auth, rate limiting, validation, httpLogger, error handler
-│   │   ├── models/          # Mongoose models (User, Job)
+│   │   ├── models/          # Mongoose models (User, Job, Schedule, ScheduleExecution)
 │   │   ├── processors/      # Job dispatcher and email execution worker
 │   │   ├── queues/          # BullMQ queue producer definition
-│   │   ├── routes/          # REST route declarations (/auth, /jobs, /monitoring, /dlq)
-│   │   ├── services/        # Business logic (Job lifecycle, DLQ, Monitoring)
-│   │   ├── utils/           # JWT, Redis locks, timeouts, worker heartbeat, logger, metrics
+│   │   ├── routes/          # REST route declarations (/auth, /jobs, /schedules, /monitoring, /dlq)
+│   │   ├── scheduler/       # Distributed Cron & One-time Scheduler Engine
+│   │   ├── services/        # Business logic (Job, Schedule, DLQ, Monitoring)
+│   │   ├── utils/           # JWT, Redis locks, cronHelper, timeouts, heartbeat, logger, metrics
 │   │   ├── app.js           # Express app, middleware stack, /metrics endpoint
 │   │   ├── server.js        # API HTTP server entry point (Port 5000)
 │   │   └── worker.js        # Autonomous background worker entry point (Port 10000)
