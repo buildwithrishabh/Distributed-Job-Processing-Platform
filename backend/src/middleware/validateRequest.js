@@ -1,5 +1,5 @@
 const { z } = require("zod");
-const { JOB_TYPES, SCHEDULE_TYPES } = require("../config/constant");
+const { JOB_TYPES, SCHEDULE_TYPES, MISFIRE_POLICY } = require("../config/constant");
 const { isValidTimeZone, computeNextRunAt } = require("../utils/cronHelper");
 
 // Define Job Creation Schema using Zod
@@ -97,12 +97,31 @@ const createScheduleSchema = z
     },
   );
 
+const updateScheduleSchema = z
+  .object({
+    name: z.string().min(1).trim().optional(),
+    payload: z.record(z.any()).optional(),
+    priority: z.number().min(0).optional(),
+    maxAttempts: z.number().int().min(1).optional(),
+    runAt: z.string().datetime().optional(),
+    cronExpression: z.string().trim().optional(),
+    timezone: z.string().trim().optional(),
+    misfirePolicy: z.enum(Object.values(MISFIRE_POLICY)).optional(),
+  })
+  .refine((data) => !data.timezone || isValidTimeZone(data.timezone), {
+    message: "Invalid IANA timezone",
+    path: ["timezone"],
+  });
+
 const validateCreateJob = validate(createJobSchema);
 const validateCreateSchedule = validate(createScheduleSchema);
+const validateUpdateSchedule = validate(updateScheduleSchema);
 
 module.exports = {
   validateCreateJob,
   validateCreateSchedule,
+  validateUpdateSchedule,
   createJobSchema,
   createScheduleSchema,
+  updateScheduleSchema,
 };
