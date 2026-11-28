@@ -80,12 +80,10 @@ export function DeadJobsView({ onSelectJob, notify }) {
             <span>Dead jobs can be safely re-queued for another attempt.</span>
           </div>
           <div className="toolbar-right">
-            <span>
-              {data ? `${data.total} dead jobs` : "Loading"}
-              <button className="icon-button bordered" onClick={load} title="Refresh DLQ">
-                <RefreshCw size={14} />
-              </button>
-            </span>
+            <span>{data ? `${data.total} dead jobs` : "Loading"}</span>
+            <button className="icon-button bordered" onClick={load} title="Refresh DLQ">
+              <RefreshCw size={14} />
+            </button>
           </div>
         </div>
         {error ? (

@@ -226,6 +226,7 @@ function DashboardShell({ user, onSignOut }) {
               key={refreshKey}
               onNavigate={setPage}
               onCreate={() => setCreateOpen(true)}
+              onCreateSchedule={() => setCreateScheduleOpen(true)}
               onSelectJob={setDetail}
             />
           )}

@@ -9,6 +9,15 @@ import { errorText } from "../utils";
 import { ErrorPanel, PageHeading } from "./Common";
 import { EmptyState, LoadingRows, Status } from "./JobsTable";
 
+const formatUptime = (seconds = 0) => {
+  const s = Math.floor(seconds);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  return `${h}h ${m % 60}m`;
+};
+
 export function WorkerTelemetry() {
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
@@ -105,7 +114,7 @@ export function WorkerTelemetry() {
                       <td>
                         <Status value={worker.health} />
                       </td>
-                      <td>{Math.floor((worker.uptime || 0) / 60)}m</td>
+                      <td>{formatUptime(worker.uptime)}</td>
                       <td>
                         {Math.round(
                           (worker.memoryUsage?.rss || 0) / 1024 / 1024

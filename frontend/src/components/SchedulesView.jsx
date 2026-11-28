@@ -14,7 +14,7 @@ import {
 import { api } from "../api";
 import { errorText, fmtDate, shortId } from "../utils";
 import { ErrorPanel, PageHeading } from "./Common";
-import { LoadingRows, Pagination } from "./JobsTable";
+import { EmptyState, LoadingRows, Pagination } from "./JobsTable";
 
 const SCHEDULE_STATUSES = [
   { value: "", label: "All statuses" },
@@ -24,11 +24,11 @@ const SCHEDULE_STATUSES = [
   { value: "CANCELLED", label: "CANCELLED" },
 ];
 
-const statusBadgeClass = (status) => {
-  if (status === "ACTIVE" || status === "COMPLETED") return "COMPLETED";
-  if (status === "PAUSED") return "RETRYING";
-  if (status === "CANCELLED") return "CANCELLED";
-  return "PENDING";
+const statusKind = (status) => {
+  if (status === "ACTIVE" || status === "COMPLETED") return "completed";
+  if (status === "PAUSED") return "retrying";
+  if (status === "CANCELLED") return "cancelled";
+  return "pending";
 };
 
 export function SchedulesView({ onSelectSchedule, onCreate, notify }) {
@@ -145,9 +145,23 @@ export function SchedulesView({ onSelectSchedule, onCreate, notify }) {
           <div className="toolbar-right">
             <span>
               {data
-                ? `${pagination.total ?? filtered.length} schedules`
+                ? search.trim()
+                  ? `${filtered.length} shown · ${pagination.total ?? filtered.length} total`
+                  : `${pagination.total ?? filtered.length} schedules`
                 : "Loading schedules"}
             </span>
+            {(search || status) && (
+              <button
+                className="text-button clear-filters"
+                onClick={() => {
+                  setSearch("");
+                  setStatus("");
+                  setPage(1);
+                }}
+              >
+                Clear filters
+              </button>
+            )}
             <button
               className="icon-button bordered"
               onClick={load}
@@ -161,6 +175,18 @@ export function SchedulesView({ onSelectSchedule, onCreate, notify }) {
 
         {error ? (
           <ErrorPanel message={error} onRetry={load} />
+        ) : loading ? (
+          <LoadingRows />
+        ) : filtered.length === 0 ? (
+          <EmptyState
+            icon={CalendarClock}
+            title="No schedules found"
+            description={
+              pagination.total
+                ? "Try a different search or status, or clear the current filters."
+                : "Create a one-time or recurring cron schedule to get started."
+            }
+          />
         ) : (
           <div className="table-wrap">
             <table>
@@ -176,109 +202,108 @@ export function SchedulesView({ onSelectSchedule, onCreate, notify }) {
                 </tr>
               </thead>
               <tbody>
-                {loading ? (
-                  <LoadingRows cols={7} />
-                ) : filtered.length === 0 ? (
-                  <tr>
-                    <td colSpan={7}>
-                      <div className="empty-state">
-                        <CalendarClock size={22} />
-                        <strong>No schedules found</strong>
-                        <p>Create a one-time or recurring cron schedule to get started.</p>
+                {filtered.map((s) => (
+                  <tr
+                    key={s.scheduleId}
+                    className="clickable-row"
+                    onClick={() => onSelectSchedule(s.scheduleId)}
+                  >
+                    <td>
+                      <strong>{s.name}</strong>
+                      <div className="muted mono" style={{ fontSize: "12px" }}>
+                        {shortId(s.scheduleId)}
+                      </div>
+                    </td>
+                    <td>
+                      <div>
+                        <span className="priority">{s.scheduleType}</span>{" "}
+                        <span className="mono" style={{ fontSize: "12px" }}>
+                          {s.scheduleType === "RECURRING"
+                            ? s.cronExpression
+                            : fmtDate(s.runAt)}
+                        </span>
+                      </div>
+                      <div className="muted" style={{ fontSize: "12px" }}>
+                        {s.timezone || "UTC"}
+                      </div>
+                    </td>
+                    <td>
+                      <span className={`status status-${statusKind(s.status)}`}>
+                        <i />
+                        {s.status}
+                      </span>
+                    </td>
+                    <td>{fmtDate(s.nextRunAt)}</td>
+                    <td>{fmtDate(s.lastRunAt)}</td>
+                    <td>
+                      <span>{s.runCount ?? 0}</span>
+                      {s.failureCount > 0 && (
+                        <span style={{ color: "var(--red-text)", marginLeft: 6 }}>
+                          ({s.failureCount} failed)
+                        </span>
+                      )}
+                    </td>
+                    <td>
+                      <div style={{ display: "flex", gap: 6 }}>
+                        {s.status === "ACTIVE" && (
+                          <button
+                            className="button small secondary"
+                            disabled={busyId === s.scheduleId}
+                            onClick={(e) =>
+                              runAction(e, s.scheduleId, api.pauseSchedule, "Schedule paused.")
+                            }
+                          >
+                            {busyId === s.scheduleId ? (
+                              <LoaderCircle size={12} className="spin" />
+                            ) : (
+                              <Pause size={12} />
+                            )}{" "}
+                            Pause
+                          </button>
+                        )}
+                        {s.status === "PAUSED" && (
+                          <button
+                            className="button small primary"
+                            disabled={busyId === s.scheduleId}
+                            onClick={(e) =>
+                              runAction(e, s.scheduleId, api.resumeSchedule, "Schedule resumed.")
+                            }
+                          >
+                            {busyId === s.scheduleId ? (
+                              <LoaderCircle size={12} className="spin" />
+                            ) : (
+                              <Play size={12} />
+                            )}{" "}
+                            Resume
+                          </button>
+                        )}
+                        {["ACTIVE", "PAUSED"].includes(s.status) && (
+                          <button
+                            className="button small danger"
+                            disabled={busyId === s.scheduleId}
+                            title="Cancel schedule"
+                            onClick={(e) =>
+                              runAction(e, s.scheduleId, api.cancelSchedule, "Schedule cancelled.")
+                            }
+                          >
+                            <X size={12} />
+                          </button>
+                        )}
+                        {["COMPLETED", "CANCELLED"].includes(s.status) && (
+                          <button
+                            className="button small danger"
+                            disabled={busyId === s.scheduleId}
+                            onClick={(e) =>
+                              runAction(e, s.scheduleId, api.deleteSchedule, "Schedule deleted.")
+                            }
+                          >
+                            <Trash2 size={12} /> Delete
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
-                ) : (
-                  filtered.map((s) => (
-                    <tr
-                      key={s.scheduleId}
-                      className="clickable-row"
-                      onClick={() => onSelectSchedule(s.scheduleId)}
-                    >
-                      <td>
-                        <strong>{s.name}</strong>
-                        <div className="muted mono" style={{ fontSize: "12px" }}>
-                          {shortId(s.scheduleId)}
-                        </div>
-                      </td>
-                      <td>
-                        <div>
-                          <span className="priority">{s.scheduleType}</span>{" "}
-                          <span className="mono" style={{ fontSize: "12px" }}>
-                            {s.scheduleType === "RECURRING"
-                              ? s.cronExpression
-                              : fmtDate(s.runAt)}
-                          </span>
-                        </div>
-                        <div className="muted" style={{ fontSize: "12px" }}>
-                          {s.timezone || "UTC"}
-                        </div>
-                      </td>
-                      <td>
-                        <span className={`badge ${statusBadgeClass(s.status)}`}>
-                          {s.status}
-                        </span>
-                      </td>
-                      <td>{fmtDate(s.nextRunAt)}</td>
-                      <td>{fmtDate(s.lastRunAt)}</td>
-                      <td>
-                        <span>{s.runCount ?? 0}</span>
-                        {s.failureCount > 0 && (
-                          <span style={{ color: "var(--red-text)", marginLeft: 6 }}>
-                            ({s.failureCount} failed)
-                          </span>
-                        )}
-                      </td>
-                      <td>
-                        <div style={{ display: "flex", gap: 6 }}>
-                          {s.status === "ACTIVE" && (
-                            <button
-                              className="button small secondary"
-                              disabled={busyId === s.scheduleId}
-                              onClick={(e) =>
-                                runAction(e, s.scheduleId, api.pauseSchedule, "Schedule paused.")
-                              }
-                            >
-                              {busyId === s.scheduleId ? (
-                                <LoaderCircle size={12} className="spin" />
-                              ) : (
-                                <Pause size={12} />
-                              )}{" "}
-                              Pause
-                            </button>
-                          )}
-                          {s.status === "PAUSED" && (
-                            <button
-                              className="button small primary"
-                              disabled={busyId === s.scheduleId}
-                              onClick={(e) =>
-                                runAction(e, s.scheduleId, api.resumeSchedule, "Schedule resumed.")
-                              }
-                            >
-                              {busyId === s.scheduleId ? (
-                                <LoaderCircle size={12} className="spin" />
-                              ) : (
-                                <Play size={12} />
-                              )}{" "}
-                              Resume
-                            </button>
-                          )}
-                          {["COMPLETED", "CANCELLED"].includes(s.status) && (
-                            <button
-                              className="button small danger"
-                              disabled={busyId === s.scheduleId}
-                              onClick={(e) =>
-                                runAction(e, s.scheduleId, api.deleteSchedule, "Schedule deleted.")
-                              }
-                            >
-                              <Trash2 size={12} /> Delete
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
+                ))}
               </tbody>
             </table>
           </div>

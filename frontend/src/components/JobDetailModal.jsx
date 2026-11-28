@@ -218,6 +218,9 @@ export function JobDetailModal({ id, onClose, onChanged, notify }) {
               <DetailField label="Updated" value={fmtDate(job.updatedAt)} />
               <DetailField label="Started" value={fmtDate(job.startedAt)} />
               <DetailField label="Completed" value={fmtDate(job.completedAt)} />
+              {job.scheduleId && (
+                <DetailField label="Schedule ID" value={job.scheduleId} mono />
+              )}
             </div>
 
             {job.error?.message && (

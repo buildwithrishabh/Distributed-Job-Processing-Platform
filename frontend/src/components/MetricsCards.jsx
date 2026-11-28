@@ -30,10 +30,11 @@ export function MetricsCards({ stats }) {
     },
     {
       label: "In progress",
-      value:
-        (stats?.PENDING || 0) +
-        (stats?.PROCESSING || 0) +
-        (stats?.RETRYING || 0),
+      value: stats
+        ? (stats.PENDING || 0) +
+          (stats.PROCESSING || 0) +
+          (stats.RETRYING || 0)
+        : undefined,
       icon: Clock3,
       note: `${stats?.PROCESSING || 0} currently processing`,
     },

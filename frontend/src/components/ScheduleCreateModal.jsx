@@ -36,6 +36,20 @@ export function ScheduleCreateModal({ onClose, onCreated }) {
   const [priority, setPriority] = useState(0);
   const [maxAttempts, setMaxAttempts] = useState(3);
 
+  const applyEmailPreset = (kind) => {
+    if (kind === "digest") {
+      setName("Daily Platform Digest");
+      setTo("user@example.com");
+      setSubject("Daily Job Throughput Digest");
+      setBody("Here is your scheduled daily platform summary.");
+    } else if (kind === "reminder") {
+      setName("Weekly Cleanup Reminder");
+      setTo("ops@example.com");
+      setSubject("Weekly DLQ & Queue Audit");
+      setBody("Reminder: review failed or dead jobs in your workspace.");
+    }
+  };
+
   async function submit(event) {
     event.preventDefault();
     setBusy(true);
@@ -98,6 +112,25 @@ export function ScheduleCreateModal({ onClose, onCreated }) {
         </div>
 
         <div className="modal-body">
+          <div className="template-pills">
+            <span className="template-pills-label">
+              <Sparkles size={12} color="var(--primary)" /> Quick templates:
+            </span>
+            <button
+              type="button"
+              className="template-pill"
+              onClick={() => applyEmailPreset("digest")}
+            >
+              Daily Digest
+            </button>
+            <button
+              type="button"
+              className="template-pill"
+              onClick={() => applyEmailPreset("reminder")}
+            >
+              Weekly Audit
+            </button>
+          </div>
           <form id="create-schedule-form" onSubmit={submit} className="form-stack modal-form">
             <div className="form-row-2">
               <Field label="Schedule name">

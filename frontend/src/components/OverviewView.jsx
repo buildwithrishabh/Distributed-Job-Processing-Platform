@@ -12,7 +12,7 @@ import { JobsTable } from "./JobsTable";
 import { MetricsCards } from "./MetricsCards";
 import { useSocket } from "../context/SocketContext";
 
-export function OverviewView({ onNavigate, onCreate, onSelectJob }) {
+export function OverviewView({ onNavigate, onCreate, onCreateSchedule, onSelectJob }) {
   const [data, setData] = useState(null);
   const [jobs, setJobs] = useState(null);
   const [error, setError] = useState("");
@@ -78,9 +78,16 @@ export function OverviewView({ onNavigate, onCreate, onSelectJob }) {
         title="Dashboard"
         description="A live view of your distributed background job queue."
         action={
-          <button className="button primary" onClick={onCreate}>
-            <Plus size={16} /> Create job
-          </button>
+          <div style={{ display: "flex", gap: 8 }}>
+            {onCreateSchedule && (
+              <button className="button secondary" onClick={onCreateSchedule}>
+                <Plus size={16} /> New schedule
+              </button>
+            )}
+            <button className="button primary" onClick={onCreate}>
+              <Plus size={16} /> Create job
+            </button>
+          </div>
         }
       />
 
