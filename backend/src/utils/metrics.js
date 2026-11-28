@@ -1,6 +1,9 @@
 const client = require("prom-client");
+const mongoose = require("mongoose");
 const { jobQueue } = require("../queues/job.queue");
 const { getActiveWorker } = require("./heartBeat");
+const Schedule = require("../models/schedule");
+const { SCHEDULE_STATUS } = require("../config/constant");
 
 // create a Registry
 const register = new client.Registry();
@@ -55,6 +58,35 @@ const jobsProcessedTotal = new client.Counter({
 });
 register.registerMetric(jobsProcessedTotal);
 
+// --- Scheduler Custom Metrics ---
+const schedulerTriggersTotal = new client.Counter({
+  name: "scheduler_triggers_total",
+  help: "Total number of schedule trigger attempts",
+  labelNames: ["status"], // triggered, skipped, failed
+});
+register.registerMetric(schedulerTriggersTotal);
+
+const schedulerTickDuration = new client.Histogram({
+  name: "scheduler_tick_duration_seconds",
+  help: "Duration of scheduler polling ticks in seconds",
+  buckets: [0.01, 0.05, 0.1, 0.5, 1, 2.5, 5],
+});
+register.registerMetric(schedulerTickDuration);
+
+const schedulerTriggerLag = new client.Histogram({
+  name: "scheduler_trigger_lag_seconds",
+  help: "Delay between scheduledFor and actual trigger time in seconds",
+  buckets: [0.5, 1, 2, 5, 10, 30, 60],
+});
+register.registerMetric(schedulerTriggerLag);
+
+const schedulerSchedulesCount = new client.Gauge({
+  name: "scheduler_schedules_count",
+  help: "Number of schedules grouped by status",
+  labelNames: ["status"],
+});
+register.registerMetric(schedulerSchedulesCount);
+
 // Function to refresh dynamic queue and worker gauges before scrape 
 const updateDynamicGauges = async () => {
   try {
@@ -74,6 +106,21 @@ const updateDynamicGauges = async () => {
 
     const workers = await getActiveWorker();
     activeWorkersCount.set(Array.isArray(workers) ? workers.length : 0);
+
+    if (mongoose.connection.readyState === 1) {
+      const scheduleStats = await Schedule.aggregate([
+        { $group: { _id: "$status", count: { $sum: 1 } } },
+      ]);
+      const counts = Object.fromEntries(
+        Object.values(SCHEDULE_STATUS).map((s) => [s, 0]),
+      );
+      for (const item of scheduleStats) {
+        counts[item._id] = item.count;
+      }
+      for (const [status, count] of Object.entries(counts)) {
+        schedulerSchedulesCount.set({ status }, count);
+      }
+    }
   } catch (err) {
     // Fail silently if queue or redis is connecting
   }
@@ -87,5 +134,9 @@ module.exports = {
   activeWorkersCount,
   jobExecutionDuration,
   jobsProcessedTotal,
+  schedulerTriggersTotal,
+  schedulerTickDuration,
+  schedulerTriggerLag,
+  schedulerSchedulesCount,
   updateDynamicGauges,
 };

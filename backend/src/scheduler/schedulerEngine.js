@@ -9,6 +9,11 @@ const {
 const { acquireLock, releaseLock } = require("../utils/lock");
 const logger = require("../utils/logger");
 const { computeNextRunAt } = require("../utils/cronHelper");
+const {
+  schedulerTriggersTotal,
+  schedulerTickDuration,
+  schedulerTriggerLag,
+} = require("../utils/metrics");
 
 const POLL_INTERVAL_MS = 5000; // Poll in every 5 seconds
 const MISFIRE_THRESHOLD_MS = 60 * 1000; // 1 minutee se zyada late = misfire
@@ -75,6 +80,7 @@ async function triggerSingleSchedule(schedule, now) {
         { scheduleId: schedule.scheduleId, scheduledFor },
         "[Scheduler] Missed schedule skipped",
       );
+      schedulerTriggersTotal.inc({ status: "skipped" });
       return;
     }
 
@@ -106,7 +112,13 @@ async function triggerSingleSchedule(schedule, now) {
       triggeredAt: now,
       status: "TRIGGERED",
     });
+
+    schedulerTriggersTotal.inc({ status: "triggered" });
+    schedulerTriggerLag.observe(
+      Math.max(0, (now.getTime() - scheduledFor.getTime()) / 1000),
+    );
   } catch (err) {
+    schedulerTriggersTotal.inc({ status: "failed" });
     logger.error(
       {
         err,
@@ -134,6 +146,7 @@ async function triggerSingleSchedule(schedule, now) {
 
 async function processDueSchedules() {
   const now = new Date();
+  const start = process.hrtime();
 
   try {
     const dueSchedules = await Schedule.find({
@@ -148,6 +161,9 @@ async function processDueSchedules() {
     }
   } catch (err) {
     logger.error({ err }, "[Scheduler] Polling error");
+  } finally {
+    const [seconds, nanoseconds] = process.hrtime(start);
+    schedulerTickDuration.observe(seconds + nanoseconds / 1e9);
   }
 }
 
