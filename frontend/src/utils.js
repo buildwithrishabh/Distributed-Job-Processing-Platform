@@ -1,6 +1,7 @@
 import {
   Activity,
   AlertCircle,
+  CalendarClock,
   Cpu,
   LayoutDashboard,
 } from "lucide-react";
@@ -8,6 +9,7 @@ import {
 export const nav = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
   { id: "jobs", label: "Jobs", icon: Activity },
+  { id: "schedules", label: "Schedules", icon: CalendarClock },
   { id: "dead", label: "Dead letter queue", icon: AlertCircle },
   { id: "workers", label: "Workers", icon: Cpu },
 ];

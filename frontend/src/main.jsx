@@ -23,6 +23,9 @@ import { DeadJobsView } from "./components/DeadJobsView";
 import { WorkerTelemetry } from "./components/WorkerTelemetry";
 import { JobSubmitModal } from "./components/JobSubmitModal";
 import { JobDetailModal } from "./components/JobDetailModal";
+import { SchedulesView } from "./components/SchedulesView";
+import { ScheduleCreateModal } from "./components/ScheduleCreateModal";
+import { ScheduleDetailModal } from "./components/ScheduleDetailModal";
 import { SocketProvider, useSocket } from "./context/SocketContext";
 import "./styles.css";
 
@@ -32,6 +35,8 @@ function DashboardShell({ user, onSignOut }) {
   const [notice, setNotice] = useState(null);
   const [detail, setDetail] = useState(null);
   const [createOpen, setCreateOpen] = useState(false);
+  const [scheduleDetail, setScheduleDetail] = useState(null);
+  const [createScheduleOpen, setCreateScheduleOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
 
   const { socket, isConnected, connectionError } = useSocket();
@@ -46,12 +51,14 @@ function DashboardShell({ user, onSignOut }) {
     const handleKeyDown = (e) => {
       if (e.key === "Escape") {
         if (createOpen) setCreateOpen(false);
+        else if (createScheduleOpen) setCreateScheduleOpen(false);
         else if (detail) setDetail(null);
+        else if (scheduleDetail) setScheduleDetail(null);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [createOpen, detail]);
+  }, [createOpen, createScheduleOpen, detail, scheduleDetail]);
 
   // Global background notifications for terminal job events.
   // Fix #6: skip the toast if the detail modal is already open for that job —
@@ -230,6 +237,14 @@ function DashboardShell({ user, onSignOut }) {
               notify={notify}
             />
           )}
+          {page === "schedules" && (
+            <SchedulesView
+              key={`schedules-${refreshKey}`}
+              onSelectSchedule={setScheduleDetail}
+              onCreate={() => setCreateScheduleOpen(true)}
+              notify={notify}
+            />
+          )}
           {page === "dead" && (
             <DeadJobsView
               key={`dead-${refreshKey}`}
@@ -267,6 +282,28 @@ function DashboardShell({ user, onSignOut }) {
             setPage("jobs");
             setRefreshKey((v) => v + 1);
             notify(`Job ${job.jobId} submitted.`);
+          }}
+        />
+      )}
+
+      {scheduleDetail && (
+        <ScheduleDetailModal
+          id={scheduleDetail}
+          onClose={() => setScheduleDetail(null)}
+          onChanged={() => setRefreshKey((v) => v + 1)}
+          onSelectJob={(jobId) => setDetail(jobId)}
+          notify={notify}
+        />
+      )}
+
+      {createScheduleOpen && (
+        <ScheduleCreateModal
+          onClose={() => setCreateScheduleOpen(false)}
+          onCreated={(schedule) => {
+            setCreateScheduleOpen(false);
+            setPage("schedules");
+            setRefreshKey((v) => v + 1);
+            notify(`Schedule "${schedule.name}" created.`);
           }}
         />
       )}

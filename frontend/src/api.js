@@ -151,4 +151,20 @@ export const api = {
     return request(`/jobs/dead?${params}`);
   },
   retryJob: (id) => request(`/jobs/${encodeURIComponent(id)}/retry`, { method: "POST" }),
+  schedules: (page = 1, limit = 10, status = "") => {
+    const params = new URLSearchParams({ page: String(page), limit: String(limit) });
+    if (status) params.set("status", status);
+    return request(`/schedules?${params}`);
+  },
+  schedule: (id) => request(`/schedules/${encodeURIComponent(id)}`),
+  scheduleExecutions: (id, page = 1, limit = 10) => {
+    const params = new URLSearchParams({ page: String(page), limit: String(limit) });
+    return request(`/schedules/${encodeURIComponent(id)}/executions?${params}`);
+  },
+  createSchedule: (body) => request("/schedules", json("POST", body)),
+  updateSchedule: (id, body) => request(`/schedules/${encodeURIComponent(id)}`, json("PATCH", body)),
+  pauseSchedule: (id) => request(`/schedules/${encodeURIComponent(id)}/pause`, { method: "POST" }),
+  resumeSchedule: (id) => request(`/schedules/${encodeURIComponent(id)}/resume`, { method: "POST" }),
+  cancelSchedule: (id) => request(`/schedules/${encodeURIComponent(id)}/cancel`, { method: "POST" }),
+  deleteSchedule: (id) => request(`/schedules/${encodeURIComponent(id)}`, { method: "DELETE" }),
 };
